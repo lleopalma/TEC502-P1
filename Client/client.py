@@ -1,48 +1,49 @@
 import socket, threading
 
+running = True
+
 def main():
+
+    global running
 
     host = 'localhost'
     port = 12345
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-        try:
-            client_socket.connect((host, port))
-            print("\nConectado ao servidor")
-            username = input("\nDigite seu nome de usuário: ")
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-            thread1 = threading.Thread(target=receive_messages, args=[client_socket])
-            thread2 = threading.Thread(target=send_messages, args=[client_socket, username])
+    try:
+        client_socket.connect((host, port))
+        print("\nConectado ao servidor")
 
-            thread1.start()
-            thread2.start()
+        username = input("\nDigite seu nome de usuário: ")
 
-        except:
-            print("\nErro ao conectar ao servidor")
-        
-def receive_messages(client_socket):
-    continuar = True
-    while continuar:
-        try:
-            data = client_socket.recv(2048)
-            if not data:
-                continuar = False
-            print(f"\nRecebido do servidor: {data.decode("utf-8")}")
-        except:
-            print("\nErro ao receber dados do servidor")
-            continuar = False
+        thread2 = threading.Thread(target=send_messages, args=(client_socket, username))
+        thread2.start()
+        thread2.join()
+
+    except:
+        print("\nErro ao conectar ao servidor")
+
+    finally:
+        running = False
+        client_socket.close()
 
 def send_messages(client_socket, username):
-    continuar = True
-    while continuar:
+    global running
+
+    while running:
         message = input("\nDigite uma mensagem (ou 'exit' para sair): ")
+
         if message.lower() == 'exit':
-            continuar = False
+            running = False
+            break
+
         try:
             client_socket.sendall(f"{username}: {message}".encode("utf-8"))
         except:
             print("\nErro ao enviar dados para o servidor")
-            continuar = False
+            running = False
+            break
 
-if __name__ == "__main__":    
+if __name__ == "__main__":
     main()
