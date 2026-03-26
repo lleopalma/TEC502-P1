@@ -1,49 +1,93 @@
-import socket, threading
+import socket
+import threading
+
+# ──────────────────────────────────────────────
+# Cliente Operador
+# Painel humano: recebe notificações do servidor
+# e pode enviar mensagens de override manual
+# ──────────────────────────────────────────────
+
+HOST = "localhost"
+PORT = 12345
 
 running = True
 
-def main():
 
+def receber_mensagens(sock):
+    """Thread que fica escutando mensagens vindas do servidor."""
+    global running
+    while running:
+        try:
+            dados = sock.recv(2048)
+            if not dados:
+                print("\nConexão encerrada pelo servidor.")
+                running = False
+                break
+            print(dados.decode("utf-8"), end="")
+        except Exception:
+            if running:
+                print("\nErro ao receber dados do servidor.")
+            running = False
+            break
+
+
+def enviar_mensagens(sock, username):
+    """Thread que lê input do operador e envia ao servidor."""
+    global running
+    while running:
+        try:
+            mensagem = input("")
+            if mensagem.lower() == "exit":
+                running = False
+                break
+            if mensagem.strip():
+                sock.sendall(f"{username}: {mensagem}".encode("utf-8"))
+        except (EOFError, KeyboardInterrupt):
+            running = False
+            break
+        except Exception:
+            print("\nErro ao enviar mensagem.")
+            running = False
+            break
+
+
+def main():
     global running
 
-    host = 'localhost'
-    port = 12345
+    print("=== Painel do Operador ===")
+    username = input("Digite seu nome: ").strip() or "Operador"
 
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     try:
-        client_socket.connect((host, port))
-        print("\nConectado ao servidor")
+        sock.connect((HOST, PORT))
 
-        username = input("\nDigite seu nome de usuário: ")
+        # Identifica-se como operador
+        sock.sendall("operador".encode("utf-8"))
 
-        thread2 = threading.Thread(target=send_messages, args=(client_socket, username))
-        thread2.start()
-        thread2.join()
+        # Recebe confirmação do servidor
+        confirmacao = sock.recv(1024).decode("utf-8").strip()
+        print(f"\nServidor: {confirmacao}")
+        print("(Digite 'exit' para sair)\n")
 
-    except:
-        print("\nErro ao conectar ao servidor")
+        # Inicia as duas threads: recepção e envio
+        t_recv = threading.Thread(target=receber_mensagens, args=(sock,), daemon=True)
+        t_send = threading.Thread(target=enviar_mensagens, args=(sock, username))
 
+        t_recv.start()
+        t_send.start()
+
+        t_send.join()
+
+    except ConnectionRefusedError:
+        print("Erro: servidor não encontrado. Certifique-se de que server.py está rodando.")
+    except Exception as e:
+        print(f"Erro: {e}")
     finally:
         running = False
-        client_socket.close()
+        sock.close()
+        print("Desconectado.")
 
-def send_messages(client_socket, username):
-    global running
-
-    while running:
-        message = input("\nDigite uma mensagem (ou 'exit' para sair): ")
-
-        if message.lower() == 'exit':
-            running = False
-            break
-
-        try:
-            client_socket.sendall(f"{username}: {message}".encode("utf-8"))
-        except:
-            print("\nErro ao enviar dados para o servidor")
-            running = False
-            break
 
 if __name__ == "__main__":
     main()
