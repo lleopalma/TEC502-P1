@@ -1,6 +1,7 @@
 import socket
 import threading
-
+import os
+import time
 # ──────────────────────────────────────────────
 # Cliente Operador
 # Painel humano: recebe notificações do servidor
@@ -29,6 +30,8 @@ def receber_mensagens(sock):
                 print("\nErro ao receber dados do servidor.")
             running = False
             break
+        time.sleep(0.5)
+        os.system("cls" if os.name == "nt" else "clear")
 
 
 def enviar_mensagens(sock, username):
@@ -50,6 +53,13 @@ def enviar_mensagens(sock, username):
             running = False
             break
 
+def menu():
+    print("=== Menu do Operador ===")
+    print("1. Enviar mensagem de override")
+    print("2. Visualizar status do sistema")
+    print("3. Sair")
+    escolha = input("Escolha uma opção: ").strip()
+    return escolha
 
 def main():
     global running
@@ -68,16 +78,17 @@ def main():
         # Recebe confirmação do servidor
         confirmacao = sock.recv(1024).decode("utf-8").strip()
         print(f"\nServidor: {confirmacao}")
+        escolha = menu()
+        if escolha == "1":
+            print("\nModo Override ativado. Digite suas mensagens abaixo.")
+            enviar_mensagens(sock, username)
+        elif escolha == "2":
+            print("\nVisualizando status do sistema...")
+            receber_mensagens(sock)
+        elif escolha == "3":
+            print("\nSaindo...")
+            running = False
         print("(Digite 'exit' para sair)\n")
-
-        # Inicia as duas threads: recepção e envio
-        t_recv = threading.Thread(target=receber_mensagens, args=(sock,), daemon=True)
-        t_send = threading.Thread(target=enviar_mensagens, args=(sock, username))
-
-        t_recv.start()
-        t_send.start()
-
-        t_send.join()
 
     except ConnectionRefusedError:
         print("Erro: servidor não encontrado. Certifique-se de que server.py está rodando.")

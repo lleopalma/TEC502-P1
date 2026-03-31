@@ -1,0 +1,57 @@
+services:
+  servidor:
+    build: ./Server
+    container_name: iot_server
+    ports:
+      - "12345:12345/tcp"
+      - "12346:12346/udp"
+      - "12347:12347/udp"
+    networks:
+      - iot_net
+
+  # Sensores
+  sensor-temp:
+    build: ./Sensors
+    command: python -u sensor_temp.py
+    depends_on:
+      - servidor
+    networks:
+      - iot_net
+
+  sensor-umid:
+    build: ./Sensors
+    command: python -u sensor_umid.py
+    depends_on:
+      - servidor
+    networks:
+      - iot_net
+
+  # Atuadores (agora apontando para a pasta /dispositivos)
+  atuador-vent:
+    build: ./Client
+    command: python -u atuador_vent.py
+    depends_on:
+      - servidor
+    networks:
+      - iot_net
+
+  atuador-umid:
+    build: ./Client
+    command: python -u atuador_umid.py
+    depends_on:
+      - servidor
+    networks:
+      - iot_net
+
+  # Cliente Operador Interativo
+  operador:
+    build: ./Client
+    image: iot_dispositivos_base
+    stdin_open: true
+    tty: true
+    networks:
+      - iot_net
+
+networks:
+  iot_net:
+    driver: bridge
