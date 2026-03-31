@@ -4,21 +4,25 @@ import threading
 # ──────────────────────────────────────────────
 # Listas separadas por tipo de cliente TCP
 # ──────────────────────────────────────────────
-operadores = []        # clientes humanos (client.py)
-ventiladores = []      # atuadores de temperatura
-umidificadores = []    # atuadores de umidade
+operadores    = []  # clientes humanos (client.py)
+ventiladores  = []  # atuadores de temperatura
+umidificadores = [] # atuadores de umidade
 
 # Portas
-TCP_PORT = 12345
-UDP_TEMP_PORT = 12346   # sensor de temperatura
-UDP_UMID_PORT = 12347   # sensor de umidade
-HOST = "localhost"
+TCP_PORT      = 12345
+UDP_TEMP_PORT = 12346  # sensor de temperatura
+UDP_UMID_PORT = 12347  # sensor de umidade
+HOST          = "localhost"
 
 # Limiares
-TEMP_LIGAR  = 30   # °C → liga ventilador
+TEMP_LIGAR    = 30  # °C → liga ventilador
 TEMP_DESLIGAR = 25
-UMID_LIGAR  = 70   # %  → liga umidificador
+UMID_LIGAR    = 70  # %  → liga umidificador
 UMID_DESLIGAR = 50
+
+# Flags de override — True = operador assumiu o controle, automação suspensa
+override_ventilador   = False
+override_umidificador = False
 
 lock = threading.Lock()
 
@@ -48,7 +52,7 @@ def notificar_operadores(mensagem):
 # Lógica de negócio: temperatura
 # ──────────────────────────────────────────────
 
-ultimo_cmd_temp = None   # evita repetir comando
+ultimo_cmd_temp = None
 
 def processar_temperatura(valor, endereco):
     global ultimo_cmd_temp
@@ -56,6 +60,10 @@ def processar_temperatura(valor, endereco):
     log = f"Sensor de temperatura {endereco}: {valor}°C"
     print(log)
     notificar_operadores(log)
+
+    # Operador no controle — ignora limiares
+    if override_ventilador:
+        return
 
     if valor >= TEMP_LIGAR and ultimo_cmd_temp != "LIGAR":
         ultimo_cmd_temp = "LIGAR"
@@ -86,6 +94,10 @@ def processar_umidade(valor, endereco):
     log = f"Sensor de umidade {endereco}: {valor}%"
     print(log)
     notificar_operadores(log)
+
+    # Operador no controle — ignora limiares
+    if override_umidificador:
+        return
 
     if valor >= UMID_LIGAR and ultimo_cmd_umid != "LIGAR":
         ultimo_cmd_umid = "LIGAR"
@@ -133,13 +145,10 @@ def handle_client(client_socket, address):
             print(f"Umidificador registrado: {address}")
             client_socket.sendall("Registrado como UMIDIFICADOR\n".encode())
         else:
-            # Trata qualquer outra coisa como operador
             operadores.append(client_socket)
             print(f"Operador conectado: {address}")
             client_socket.sendall("Conectado como OPERADOR. Aguardando dados...\n".encode())
 
-    # Atuadores ficam em escuta passiva (recebem comandos, não enviam)
-    # Operadores podem enviar mensagens manuais de override
     if tipo not in ("ventilador", "umidificador"):
         loop_operador(client_socket, address)
     else:
@@ -147,7 +156,9 @@ def handle_client(client_socket, address):
 
 
 def loop_operador(client_socket, address):
-    """Recebe mensagens do operador e as exibe no servidor."""
+    """Recebe mensagens do operador, interpreta comandos de override."""
+    global override_ventilador, override_umidificador
+
     while True:
         try:
             dados = client_socket.recv(2048)
@@ -155,14 +166,43 @@ def loop_operador(client_socket, address):
                 break
             mensagem = dados.decode("utf-8").strip()
             print(f"[OPERADOR {address}] {mensagem}")
-            # Reencaminha para outros operadores
-            with lock:
-                for s in operadores:
-                    if s is not client_socket:
-                        try:
-                            s.sendall(f"[OPERADOR] {mensagem}\n".encode())
-                        except Exception:
-                            pass
+
+            # LIGAR devolve o atuador à automação
+            if mensagem == "LIGAR_VENTILADOR":
+                override_ventilador = False
+                with lock:
+                    enviar_para_lista(ventiladores, mensagem + "\n")
+                notificar_operadores(f"Override: {mensagem} — automação retomada")
+
+            # DESLIGAR suspende a automação e assume controle
+            elif mensagem == "DESLIGAR_VENTILADOR":
+                override_ventilador = True
+                with lock:
+                    enviar_para_lista(ventiladores, mensagem + "\n")
+                notificar_operadores(f"Override: {mensagem} — automação suspensa")
+
+            elif mensagem == "LIGAR_UMIDIFICADOR":
+                override_umidificador = False
+                with lock:
+                    enviar_para_lista(umidificadores, mensagem + "\n")
+                notificar_operadores(f"Override: {mensagem} — automação retomada")
+
+            elif mensagem == "DESLIGAR_UMIDIFICADOR":
+                override_umidificador = True
+                with lock:
+                    enviar_para_lista(umidificadores, mensagem + "\n")
+                notificar_operadores(f"Override: {mensagem} — automação suspensa")
+
+            else:
+                # Mensagem livre → reencaminha para outros operadores
+                with lock:
+                    for s in operadores:
+                        if s is not client_socket:
+                            try:
+                                s.sendall(f"[OPERADOR] {mensagem}\n".encode())
+                            except Exception:
+                                pass
+
         except Exception:
             break
 
@@ -217,7 +257,6 @@ def udp_temp_server():
             data, address = udp.recvfrom(2048)
             mensagem = data.decode("utf-8").strip()
 
-            # Formato esperado: "temperatura:28"
             if mensagem.startswith("temperatura:"):
                 try:
                     valor = int(mensagem.split(":")[1])
@@ -235,7 +274,6 @@ def udp_umid_server():
             data, address = udp.recvfrom(2048)
             mensagem = data.decode("utf-8").strip()
 
-            # Formato esperado: "umidade:65"
             if mensagem.startswith("umidade:"):
                 try:
                     valor = int(mensagem.split(":")[1])

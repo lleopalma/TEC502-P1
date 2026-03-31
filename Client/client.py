@@ -2,21 +2,20 @@ import socket
 import threading
 import os
 import time
-# ──────────────────────────────────────────────
-# Cliente Operador
-# Painel humano: recebe notificações do servidor
-# e pode enviar mensagens de override manual
-# ──────────────────────────────────────────────
 
 HOST = "localhost"
 PORT = 12345
 
-running = True
+running = True       # controla o programa inteiro
+exibindo = False     # True quando o usuário está na tela de status
 
 
-def receber_mensagens(sock):
-    """Thread que fica escutando mensagens vindas do servidor."""
-    global running
+def receber_mensagens_background(sock):
+    """
+    Thread em background: recebe dados do servidor continuamente.
+    Só imprime na tela quando a flag 'exibindo' estiver ativa.
+    """
+    global running, exibindo
     while running:
         try:
             dados = sock.recv(2048)
@@ -24,27 +23,63 @@ def receber_mensagens(sock):
                 print("\nConexão encerrada pelo servidor.")
                 running = False
                 break
-            print(dados.decode("utf-8"), end="")
+            if exibindo:
+                print(dados.decode("utf-8").strip())
+                time.sleep(1) 
+                apagar_tela() 
         except Exception:
             if running:
                 print("\nErro ao receber dados do servidor.")
             running = False
             break
-        time.sleep(0.5)
-        os.system("cls" if os.name == "nt" else "clear")
+
+def exibir_status():
+    """
+    Ativa o streaming ao vivo. As mensagens são impressas pela thread
+    de background enquanto o usuário não pressionar Enter.
+    """
+    global exibindo
+    apagar_tela()
+    print("=== Status do Sistema — ao vivo ===")
+    print("Pressione Enter para voltar ao menu...\n")
+
+    exibindo = True
+    input()          # bloqueia até o usuário pressionar Enter
+    exibindo = False
+
+    apagar_tela()
 
 
 def enviar_mensagens(sock, username):
-    """Thread que lê input do operador e envia ao servidor."""
+    """Envia mensagens de override. Digite 'voltar' para retornar ao menu."""
     global running
+    print("\nModo Override ativado. Digite 'voltar' para retornar ao menu.\n")
+
     while running:
         try:
-            mensagem = input("")
-            if mensagem.lower() == "exit":
-                running = False
+            print("1. LIGAR_VENTILADOR")
+            print("2. DESLIGAR_VENTILADOR")
+            print("3. LIGAR_UMIDIFICADOR")
+            print("4. DESLIGAR_UMIDIFICADOR")
+            print("5. Voltar ao menu")
+            escolha = input("Escolha um comando: ").strip()
+            if escolha == "1":
+                comando = "LIGAR_VENTILADOR"
+            elif escolha == "2":
+                comando = "DESLIGAR_VENTILADOR"
+            elif escolha == "3":
+                comando = "LIGAR_UMIDIFICADOR"
+            elif escolha == "4":
+                comando = "DESLIGAR_UMIDIFICADOR"
+            elif escolha == "5" or escolha.lower() == "voltar":
+                print("\nVoltando ao menu...")
                 break
-            if mensagem.strip():
-                sock.sendall(f"{username}: {mensagem}".encode("utf-8"))
+            else:
+                print("Comando inválido. Tente novamente.")
+                continue
+
+            print(f"OVERRIDE: {comando} (enviado por {username})")
+            sock.sendall(comando.encode("utf-8"))
         except (EOFError, KeyboardInterrupt):
             running = False
             break
@@ -54,12 +89,14 @@ def enviar_mensagens(sock, username):
             break
 
 def menu():
-    print("=== Menu do Operador ===")
+    print("\n=== Menu do Operador ===")
     print("1. Enviar mensagem de override")
     print("2. Visualizar status do sistema")
     print("3. Sair")
-    escolha = input("Escolha uma opção: ").strip()
-    return escolha
+    return input("Escolha uma opção: ").strip()
+
+def apagar_tela():
+    os.system("cls" if os.name == "nt" else "clear")
 
 def main():
     global running
@@ -71,24 +108,32 @@ def main():
 
     try:
         sock.connect((HOST, PORT))
-
-        # Identifica-se como operador
         sock.sendall("operador".encode("utf-8"))
 
-        # Recebe confirmação do servidor
         confirmacao = sock.recv(1024).decode("utf-8").strip()
         print(f"\nServidor: {confirmacao}")
-        escolha = menu()
-        if escolha == "1":
-            print("\nModo Override ativado. Digite suas mensagens abaixo.")
-            enviar_mensagens(sock, username)
-        elif escolha == "2":
-            print("\nVisualizando status do sistema...")
-            receber_mensagens(sock)
-        elif escolha == "3":
-            print("\nSaindo...")
-            running = False
-        print("(Digite 'exit' para sair)\n")
+
+        # Thread de recepção sempre ativa em background
+        t_recv = threading.Thread(
+            target=receber_mensagens_background,
+            args=(sock,),
+            daemon=True
+        )
+        t_recv.start()
+
+        while running:
+            escolha = menu()
+            if escolha == "1":
+                enviar_mensagens(sock, username)
+                apagar_tela()
+            elif escolha == "2":
+                exibir_status()
+            elif escolha == "3":
+                print("\nSaindo...")
+                running = False
+            else:
+                print("Opção inválida.")
+                apagar_tela()
 
     except ConnectionRefusedError:
         print("Erro: servidor não encontrado. Certifique-se de que server.py está rodando.")

@@ -22,4 +22,4 @@ while True:
     sensor_socket.sendto(mensagem.encode("utf-8"), (HOST, PORT))
     print(f"Enviado → {mensagem}°C")
 
-    time.sleep(0.5)
+    time.sleep(1)
