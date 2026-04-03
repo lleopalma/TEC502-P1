@@ -46,11 +46,13 @@ services:
   # Cliente Operador Interativo
   operador:
     build: ./Client
+    container_name: operador
     image: iot_dispositivos_base
     stdin_open: true
     tty: true
     networks:
       - iot_net
+    command: python -u client.py
 
 networks:
   iot_net:

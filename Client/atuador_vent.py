@@ -1,12 +1,9 @@
 import socket
 
-# ──────────────────────────────────────────────
 # Atuador: Ventilador
-# Conecta via TCP e aguarda comandos do servidor
-# baseados nas leituras do sensor de temperatura
-# ──────────────────────────────────────────────
+# Conecta via TCP e aguarda comandos do servidor baseados nas leituras do sensor de temperatura
 
-HOST = "localhost"
+HOST = "servidor"
 PORT = 12345
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -39,11 +36,11 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
                 if comando == "LIGAR_VENTILADOR":
                     print("COMANDO RECEBIDO: LIGAR_VENTILADOR")
-                    print("   → Ventilador LIGADO (temperatura alta detectada)\n")
+                    print("Ventilador LIGADO (temperatura alta detectada)\n")
 
                 elif comando == "DESLIGAR_VENTILADOR":
                     print("COMANDO RECEBIDO: DESLIGAR_VENTILADOR")
-                    print("   → Ventilador DESLIGADO (temperatura normalizada)\n")
+                    print("Ventilador DESLIGADO (temperatura normalizada)\n")
 
                 else:
                     print(f"Comando desconhecido: {comando}")

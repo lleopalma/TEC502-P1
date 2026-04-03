@@ -1,9 +1,7 @@
 import socket
 import threading
 
-# ──────────────────────────────────────────────
 # Listas separadas por tipo de cliente TCP
-# ──────────────────────────────────────────────
 operadores    = []  # clientes humanos (client.py)
 ventiladores  = []  # atuadores de temperatura
 umidificadores = [] # atuadores de umidade
@@ -12,7 +10,7 @@ umidificadores = [] # atuadores de umidade
 TCP_PORT      = 12345
 UDP_TEMP_PORT = 12346  # sensor de temperatura
 UDP_UMID_PORT = 12347  # sensor de umidade
-HOST          = "localhost"
+HOST          = "0.0.0.0"
 
 # Limiares
 TEMP_LIGAR    = 30  # °C → liga ventilador
@@ -27,19 +25,17 @@ override_umidificador = False
 lock = threading.Lock()
 
 
-# ──────────────────────────────────────────────
 # Utilitários de envio
-# ──────────────────────────────────────────────
 
 def enviar_para_lista(lista, mensagem):
     """Envia uma mensagem para todos os sockets de uma lista."""
-    mortos = []
+    enviados = []
     for s in lista:
         try:
             s.sendall(mensagem.encode("utf-8"))
         except Exception:
-            mortos.append(s)
-    for s in mortos:
+            enviados.append(s)
+    for s in enviados:
         lista.remove(s)
 
 
@@ -48,9 +44,7 @@ def notificar_operadores(mensagem):
         enviar_para_lista(operadores, f"[SERVIDOR] {mensagem}\n")
 
 
-# ──────────────────────────────────────────────
-# Lógica de negócio: temperatura
-# ──────────────────────────────────────────────
+# Lógica da temperatura
 
 ultimo_cmd_temp = None
 
@@ -82,9 +76,7 @@ def processar_temperatura(valor, endereco):
             enviar_para_lista(ventiladores, cmd + "\n")
 
 
-# ──────────────────────────────────────────────
-# Lógica de negócio: umidade
-# ──────────────────────────────────────────────
+# Lógica da umidade
 
 ultimo_cmd_umid = None
 
@@ -116,9 +108,7 @@ def processar_umidade(valor, endereco):
             enviar_para_lista(umidificadores, cmd + "\n")
 
 
-# ──────────────────────────────────────────────
 # Tratamento de clientes TCP
-# ──────────────────────────────────────────────
 
 def handle_client(client_socket, address):
     """
@@ -231,9 +221,7 @@ def loop_atuador(client_socket, address, tipo):
     print(f"Atuador ({tipo}) desconectado: {address}")
 
 
-# ──────────────────────────────────────────────
 # Servidores de rede
-# ──────────────────────────────────────────────
 
 def tcp_server():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:

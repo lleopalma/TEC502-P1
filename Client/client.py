@@ -3,12 +3,11 @@ import threading
 import os
 import time
 
-HOST = "localhost"
+HOST = "servidor"
 PORT = 12345
 
 running = True       # controla o programa inteiro
 exibindo = False     # True quando o usuário está na tela de status
-
 
 def receber_mensagens_background(sock):
     """
@@ -25,8 +24,9 @@ def receber_mensagens_background(sock):
                 break
             if exibindo:
                 print(dados.decode("utf-8").strip())
-                time.sleep(1) 
-                apagar_tela() 
+                time.sleep(1)
+                if exibindo:
+                    apagar_tela() 
         except Exception:
             if running:
                 print("\nErro ao receber dados do servidor.")
@@ -48,7 +48,6 @@ def exibir_status():
     exibindo = False
 
     apagar_tela()
-
 
 def enviar_mensagens(sock, username):
     """Envia mensagens de override. Digite 'voltar' para retornar ao menu."""
