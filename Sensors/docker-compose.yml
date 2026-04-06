@@ -1,0 +1,20 @@
+services:
+  sensor-temp:
+    build: ./
+    command: python -u sensor_temp.py
+    environment:
+      - SERVER_HOST=${SERVER_HOST:-servidor}
+    networks:
+      - iot_net
+
+  sensor-umid:
+    build: ./
+    command: python -u sensor_umid.py
+    environment:
+      - SERVER_HOST=${SERVER_HOST:-servidor}
+    networks:
+      - iot_net
+
+networks:
+  iot_net:
+    driver: bridge

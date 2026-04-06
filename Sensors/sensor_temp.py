@@ -1,20 +1,23 @@
 import socket
 import time
 import random
+import os
 
 # Sensor de Temperatura
 # Envia leituras de temperatura via UDP ao servidor
+# SERVER_HOST pode ser definido via variável de ambiente:
+#   - mesmo computador / mesmo compose: deixa vazio (usa "servidor" pelo DNS Docker)
+#   - computador diferente: SERVER_HOST=<IP do servidor>
 
-HOST = "servidor"
-PORT = 12346          # porta UDP exclusiva para temperatura
+HOST = os.environ.get("SERVER_HOST", "servidor")
+PORT = 12346
 
 sensor_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-print(f"Sensor de temperatura iniciado. Enviando para {HOST}:{PORT} a cada {0.5}s\n")
+print(f"Sensor de temperatura iniciado. Enviando para {HOST}:{PORT} a cada 1s\n")
 
 while True:
     try:
-        # Simula leitura: valores entre 20°C e 35°C
         temperatura = random.randint(20, 35)
         mensagem = f"temperatura:{temperatura}"
 

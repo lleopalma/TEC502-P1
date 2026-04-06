@@ -3,17 +3,17 @@ import threading
 import os
 import time
 
-HOST = "servidor"
+# SERVER_HOST pode ser definido via variável de ambiente:
+#   - mesmo computador / mesmo compose: deixa vazio (usa "servidor" pelo DNS Docker)
+#   - computador diferente: SERVER_HOST=<IP do servidor>
+
+HOST = os.environ.get("SERVER_HOST", "servidor")
 PORT = 12345
 
-running = True       # controla o programa inteiro
-exibindo = False     # True quando o usuário está na tela de status
+running = True
+exibindo = False
 
 def receber_mensagens_background(sock):
-    """
-    Thread em background: recebe dados do servidor continuamente.
-    Só imprime na tela quando a flag 'exibindo' estiver ativa.
-    """
     global running, exibindo
     while running:
         try:
@@ -26,7 +26,7 @@ def receber_mensagens_background(sock):
                 print(dados.decode("utf-8").strip())
                 time.sleep(1)
                 if exibindo:
-                    apagar_tela() 
+                    apagar_tela()
         except Exception:
             if running:
                 print("\nErro ao receber dados do servidor.")
@@ -34,23 +34,18 @@ def receber_mensagens_background(sock):
             break
 
 def exibir_status():
-    """
-    Ativa o streaming ao vivo. As mensagens são impressas pela thread
-    de background enquanto o usuário não pressionar Enter.
-    """
     global exibindo
     apagar_tela()
     print("=== Status do Sistema — ao vivo ===")
     print("Pressione Enter para voltar ao menu...\n")
 
     exibindo = True
-    input()          # bloqueia até o usuário pressionar Enter
+    input()
     exibindo = False
 
     apagar_tela()
 
 def enviar_mensagens(sock, username):
-    """Envia mensagens de override. Digite 'voltar' para retornar ao menu."""
     global running
     print("\nModo Override ativado. Digite 'voltar' para retornar ao menu.\n")
 
@@ -112,7 +107,6 @@ def main():
         confirmacao = sock.recv(1024).decode("utf-8").strip()
         print(f"\nServidor: {confirmacao}")
 
-        # Thread de recepção sempre ativa em background
         t_recv = threading.Thread(
             target=receber_mensagens_background,
             args=(sock,),
@@ -135,7 +129,8 @@ def main():
                 apagar_tela()
 
     except ConnectionRefusedError:
-        print("Erro: servidor não encontrado. Certifique-se de que server.py está rodando.")
+        print(f"Erro: servidor não encontrado em {HOST}:{PORT}.")
+        print("Verifique se o servidor está rodando e se SERVER_HOST está correto.")
     except Exception as e:
         print(f"Erro: {e}")
     finally:

@@ -1,24 +1,24 @@
 import socket
+import os
 
 # Atuador: Ventilador
-# Conecta via TCP e aguarda comandos do servidor baseados nas leituras do sensor de temperatura
-# Envia confirmação de status de volta ao servidor após cada comando
+# Conecta via TCP e aguarda comandos do servidor
+# SERVER_HOST pode ser definido via variável de ambiente:
+#   - mesmo computador / mesmo compose: deixa vazio (usa "servidor" pelo DNS Docker)
+#   - computador diferente: SERVER_HOST=<IP do servidor>
 
-HOST = "servidor"
+HOST = os.environ.get("SERVER_HOST", "servidor")
 PORT = 12345
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
 
-    # Identifica-se ao servidor como ventilador
     s.sendall("ventilador".encode("utf-8"))
 
-    # Confirmação do servidor
     confirmacao = s.recv(1024).decode("utf-8").strip()
     print(f"Servidor: {confirmacao}")
     print("Aguardando comandos...\n")
 
-    # Loop de escuta de comandos
     buffer = ""
     while True:
         try:
@@ -28,7 +28,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 break
 
             buffer += dados
-            # Processa linha por linha (comandos terminam em \n)
             while "\n" in buffer:
                 linha, buffer = buffer.split("\n", 1)
                 comando = linha.strip()
@@ -38,13 +37,11 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 if comando == "LIGAR_VENTILADOR":
                     print("COMANDO RECEBIDO: LIGAR_VENTILADOR")
                     print("Ventilador LIGADO (temperatura alta detectada)\n")
-                    # Confirma o novo estado ao servidor
                     s.sendall("STATUS_VENTILADOR:LIGADO\n".encode("utf-8"))
 
                 elif comando == "DESLIGAR_VENTILADOR":
                     print("COMANDO RECEBIDO: DESLIGAR_VENTILADOR")
                     print("Ventilador DESLIGADO (temperatura normalizada)\n")
-                    # Confirma o novo estado ao servidor
                     s.sendall("STATUS_VENTILADOR:DESLIGADO\n".encode("utf-8"))
 
                 else:
