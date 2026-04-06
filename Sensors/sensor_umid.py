@@ -19,7 +19,7 @@ while True:
         mensagem = f"umidade:{umidade}"
 
         sensor_socket.sendto(mensagem.encode("utf-8"), (HOST, PORT))
-        print(f"Enviado → {mensagem}%")
+        print(f"Enviado: {mensagem}%")
 
         time.sleep(1)
     except KeyboardInterrupt:

@@ -2,6 +2,7 @@ import socket
 
 # Atuador: Umidificador
 # Conecta via TCP e aguarda comandos do servidor baseados nas leituras do sensor de umidade
+# Envia confirmação de status de volta ao servidor após cada comando
 
 HOST = "servidor"
 PORT = 12345
@@ -36,10 +37,14 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 if comando == "LIGAR_UMIDIFICADOR":
                     print("COMANDO RECEBIDO: LIGAR_UMIDIFICADOR")
                     print("Umidificador LIGADO (umidade alta detectada)\n")
+                    # Confirma o novo estado ao servidor
+                    s.sendall("STATUS_UMIDIFICADOR:LIGADO\n".encode("utf-8"))
 
                 elif comando == "DESLIGAR_UMIDIFICADOR":
                     print("COMANDO RECEBIDO: DESLIGAR_UMIDIFICADOR")
                     print("Umidificador DESLIGADO (umidade normalizada)\n")
+                    # Confirma o novo estado ao servidor
+                    s.sendall("STATUS_UMIDIFICADOR:DESLIGADO\n".encode("utf-8"))
 
                 else:
                     print(f"Comando desconhecido: {comando}")

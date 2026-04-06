@@ -29,13 +29,13 @@ lock = threading.Lock()
 
 def enviar_para_lista(lista, mensagem):
     """Envia uma mensagem para todos os sockets de uma lista."""
-    enviados = []
+    falhos = []
     for s in lista:
         try:
             s.sendall(mensagem.encode("utf-8"))
         except Exception:
-            enviados.append(s)
-    for s in enviados:
+            falhos.append(s)
+    for s in falhos:
         lista.remove(s)
 
 
@@ -55,23 +55,20 @@ def processar_temperatura(valor, endereco):
     print(log)
     notificar_operadores(log)
 
-    # Operador no controle — ignora limiares
     if override_ventilador:
         return
 
     if valor >= TEMP_LIGAR and ultimo_cmd_temp != "LIGAR":
         ultimo_cmd_temp = "LIGAR"
         cmd = "LIGAR_VENTILADOR"
-        print(f"  → {cmd}")
-        notificar_operadores(f"Temperatura alta! Enviando: {cmd}")
+        print(cmd)
         with lock:
             enviar_para_lista(ventiladores, cmd + "\n")
 
     elif valor <= TEMP_DESLIGAR and ultimo_cmd_temp != "DESLIGAR":
         ultimo_cmd_temp = "DESLIGAR"
         cmd = "DESLIGAR_VENTILADOR"
-        print(f"  → {cmd}")
-        notificar_operadores(f"Temperatura normalizada. Enviando: {cmd}")
+        print(cmd)
         with lock:
             enviar_para_lista(ventiladores, cmd + "\n")
 
@@ -87,23 +84,20 @@ def processar_umidade(valor, endereco):
     print(log)
     notificar_operadores(log)
 
-    # Operador no controle — ignora limiares
     if override_umidificador:
         return
 
     if valor >= UMID_LIGAR and ultimo_cmd_umid != "LIGAR":
         ultimo_cmd_umid = "LIGAR"
         cmd = "LIGAR_UMIDIFICADOR"
-        print(f"  → {cmd}")
-        notificar_operadores(f"Umidade alta! Enviando: {cmd}")
+        print(cmd)
         with lock:
             enviar_para_lista(umidificadores, cmd + "\n")
 
     elif valor <= UMID_DESLIGAR and ultimo_cmd_umid != "DESLIGAR":
         ultimo_cmd_umid = "DESLIGAR"
         cmd = "DESLIGAR_UMIDIFICADOR"
-        print(f"  → {cmd}")
-        notificar_operadores(f"Umidade normalizada. Enviando: {cmd}")
+        print(cmd)
         with lock:
             enviar_para_lista(umidificadores, cmd + "\n")
 
@@ -157,14 +151,12 @@ def loop_operador(client_socket, address):
             mensagem = dados.decode("utf-8").strip()
             print(f"[OPERADOR {address}] {mensagem}")
 
-            # LIGAR devolve o atuador à automação
             if mensagem == "LIGAR_VENTILADOR":
                 override_ventilador = False
                 with lock:
                     enviar_para_lista(ventiladores, mensagem + "\n")
                 notificar_operadores(f"Override: {mensagem} — automação retomada")
 
-            # DESLIGAR suspende a automação e assume controle
             elif mensagem == "DESLIGAR_VENTILADOR":
                 override_ventilador = True
                 with lock:
@@ -184,7 +176,6 @@ def loop_operador(client_socket, address):
                 notificar_operadores(f"Override: {mensagem} — automação suspensa")
 
             else:
-                # Mensagem livre → reencaminha para outros operadores
                 with lock:
                     for s in operadores:
                         if s is not client_socket:
@@ -204,12 +195,37 @@ def loop_operador(client_socket, address):
 
 
 def loop_atuador(client_socket, address, tipo):
-    """Mantém a conexão do atuador aberta; detecta desconexão."""
+    """
+    Mantém a conexão do atuador aberta.
+    Lê confirmações de status enviadas pelo atuador e repassa aos operadores.
+
+    Protocolo esperado do atuador:
+      STATUS_VENTILADOR:LIGADO
+      STATUS_VENTILADOR:DESLIGADO
+      STATUS_UMIDIFICADOR:LIGADO
+      STATUS_UMIDIFICADOR:DESLIGADO
+    """
+    buffer = ""
     while True:
         try:
             dados = client_socket.recv(1024)
             if not dados:
                 break
+
+            buffer += dados.decode("utf-8")
+
+            # Processa linha por linha
+            while "\n" in buffer:
+                linha, buffer = buffer.split("\n", 1)
+                status = linha.strip()
+                if not status:
+                    continue
+
+                # Repassa o status como notificação aos operadores
+                if status.startswith("STATUS_"):
+                    print(f"[ATUADOR {tipo.upper()} {address}] {status}")
+                    notificar_operadores(f"Atuador {tipo.upper()}: {status}")
+
         except Exception:
             break
 

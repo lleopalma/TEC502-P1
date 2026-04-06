@@ -19,7 +19,7 @@ while True:
         mensagem = f"temperatura:{temperatura}"
 
         sensor_socket.sendto(mensagem.encode("utf-8"), (HOST, PORT))
-        print(f"Enviado → {mensagem}°C")
+        print(f"Enviado: {mensagem}°C")
 
         time.sleep(1)
     except KeyboardInterrupt:
