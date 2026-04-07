@@ -18,14 +18,14 @@ while True:
     try:
         valor = random.randint(20, 35)
         mensagem = json.dumps({
-            "tipo":       "sensor",
+            "tipo":        "sensor",
             "dispositivo": "temperatura",
-            "valor":      valor,
-            "unidade":    "°C"
+            "valor":       valor,
+            "unidade":     "°C"
         })
 
         sensor_socket.sendto(mensagem.encode("utf-8"), (HOST, PORT))
-        print(f"Enviado: temperatura:{valor}°C")
+        print(f"Enviado: temperatura={valor}°C")
 
         time.sleep(1)
     except KeyboardInterrupt:

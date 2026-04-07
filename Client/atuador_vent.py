@@ -38,6 +38,7 @@ while True:
 
         # Confirmação do servidor
         confirmacao = json.loads(s.recv(1024).decode("utf-8"))
+        assert confirmacao.get("tipo") == "confirmacao"
         print(f"Servidor: {confirmacao.get('mensagem')}")
         print("Aguardando comandos...\n")
 
@@ -56,6 +57,11 @@ while True:
                     continue
 
                 dados = json.loads(linha)
+
+                # Ignora mensagens que não sejam comandos
+                if dados.get("tipo") != "comando":
+                    continue
+
                 acao = dados.get("acao", "")
 
                 if acao == "LIGAR_VENTILADOR":

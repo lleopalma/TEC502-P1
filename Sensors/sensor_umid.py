@@ -8,7 +8,7 @@ import os
 # Envia leituras via UDP ao servidor no formato JSON
 
 HOST = os.environ.get("SERVER_HOST", "servidor")
-PORT = 12347
+PORT = 12347  # porta correta para umidade
 
 sensor_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -25,7 +25,7 @@ while True:
         })
 
         sensor_socket.sendto(mensagem.encode("utf-8"), (HOST, PORT))
-        print(f"Enviado: umidade:{valor}%")
+        print(f"Enviado: umidade={valor}%")
 
         time.sleep(1)
     except KeyboardInterrupt:

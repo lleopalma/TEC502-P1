@@ -26,90 +26,125 @@ override_umidificador = False
 lock = threading.Lock()
 
 
-# Utilitários
+# ── Utilitários ───────────────────────────────────────────────────────────────
 
 def montar_mensagem(**campos):
-    """Serializa um dicionário para JSON + newline."""
-    return json.dumps(campos, ensure_ascii=False) + "\n"
+    return (json.dumps(campos, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 def enviar_para_lista(lista, **campos):
-    """Envia uma mensagem JSON para todos os sockets de uma lista."""
     mensagem = montar_mensagem(**campos)
     falhos = []
     for s in lista:
         try:
-            s.sendall(mensagem.encode("utf-8"))
+            s.sendall(mensagem)
         except Exception:
             falhos.append(s)
     for s in falhos:
         lista.remove(s)
 
 
-def notificar_operadores(mensagem):
+def notificar_operadores(**campos):
+    """Envia uma mensagem estruturada para todos os operadores conectados."""
     with lock:
-        enviar_para_lista(operadores, tipo="log", origem="servidor", mensagem=mensagem)
+        enviar_para_lista(operadores, **campos)
 
 
-# Lógica da temperatura
+# ── Lógica da temperatura ─────────────────────────────────────────────────────
 
 ultimo_cmd_temp = None
 
 def processar_temperatura(valor, endereco):
     global ultimo_cmd_temp
 
-    log = f"Sensor temperatura {endereco}: {valor}°C"
-    print(log)
-    notificar_operadores(log)
+    print(f"Sensor temperatura {endereco}: {valor}°C")
+
+    # Atualiza operadores com leitura estruturada do sensor
+    notificar_operadores(
+        tipo="sensor_update",
+        dispositivo="temperatura",
+        valor=valor,
+        unidade="°C"
+    )
 
     if override_ventilador:
         return
 
     if valor >= TEMP_LIGAR and ultimo_cmd_temp != "LIGAR":
         ultimo_cmd_temp = "LIGAR"
-        print(f"Comando: LIGAR_VENTILADOR")
-        notificar_operadores(f"Temperatura alta ({valor}°C) → LIGAR_VENTILADOR")
+        print("Comando: LIGAR_VENTILADOR")
         with lock:
             enviar_para_lista(ventiladores, tipo="comando", acao="LIGAR_VENTILADOR")
+        notificar_operadores(
+            tipo="atuador_update",
+            dispositivo="ventilador",
+            estado="LIGADO",
+            override=False,
+            motivo=f"Temperatura alta ({valor}°C)"
+        )
 
     elif valor <= TEMP_DESLIGAR and ultimo_cmd_temp != "DESLIGAR":
         ultimo_cmd_temp = "DESLIGAR"
-        print(f"Comando: DESLIGAR_VENTILADOR")
-        notificar_operadores(f"Temperatura normalizada ({valor}°C) → DESLIGAR_VENTILADOR")
+        print("Comando: DESLIGAR_VENTILADOR")
         with lock:
             enviar_para_lista(ventiladores, tipo="comando", acao="DESLIGAR_VENTILADOR")
+        notificar_operadores(
+            tipo="atuador_update",
+            dispositivo="ventilador",
+            estado="DESLIGADO",
+            override=False,
+            motivo=f"Temperatura normalizada ({valor}°C)"
+        )
 
 
-# Lógica da umidade
+# ── Lógica da umidade ─────────────────────────────────────────────────────────
 
 ultimo_cmd_umid = None
 
 def processar_umidade(valor, endereco):
     global ultimo_cmd_umid
 
-    log = f"Sensor umidade {endereco}: {valor}%"
-    print(log)
-    notificar_operadores(log)
+    print(f"Sensor umidade {endereco}: {valor}%")
+
+    # Atualiza operadores com leitura estruturada do sensor
+    notificar_operadores(
+        tipo="sensor_update",
+        dispositivo="umidade",
+        valor=valor,
+        unidade="%"
+    )
 
     if override_umidificador:
         return
 
     if valor >= UMID_LIGAR and ultimo_cmd_umid != "LIGAR":
         ultimo_cmd_umid = "LIGAR"
-        print(f"Comando: LIGAR_UMIDIFICADOR")
-        notificar_operadores(f"Umidade alta ({valor}%) → LIGAR_UMIDIFICADOR")
+        print("Comando: LIGAR_UMIDIFICADOR")
         with lock:
             enviar_para_lista(umidificadores, tipo="comando", acao="LIGAR_UMIDIFICADOR")
+        notificar_operadores(
+            tipo="atuador_update",
+            dispositivo="umidificador",
+            estado="LIGADO",
+            override=False,
+            motivo=f"Umidade alta ({valor}%)"
+        )
 
     elif valor <= UMID_DESLIGAR and ultimo_cmd_umid != "DESLIGAR":
         ultimo_cmd_umid = "DESLIGAR"
-        print(f"Comando: DESLIGAR_UMIDIFICADOR")
-        notificar_operadores(f"Umidade normalizada ({valor}%) → DESLIGAR_UMIDIFICADOR")
+        print("Comando: DESLIGAR_UMIDIFICADOR")
         with lock:
             enviar_para_lista(umidificadores, tipo="comando", acao="DESLIGAR_UMIDIFICADOR")
+        notificar_operadores(
+            tipo="atuador_update",
+            dispositivo="umidificador",
+            estado="DESLIGADO",
+            override=False,
+            motivo=f"Umidade normalizada ({valor}%)"
+        )
 
 
-# Tratamento de clientes TCP
+# ── Tratamento de clientes TCP ────────────────────────────────────────────────
 
 def handle_client(client_socket, address):
     buffer = ""
@@ -123,6 +158,12 @@ def handle_client(client_socket, address):
 
         linha, _ = buffer.split("\n", 1)
         dados = json.loads(linha.strip())
+
+        if dados.get("tipo") != "identificacao":
+            print(f"Mensagem inválida de {address}: esperado tipo=identificacao")
+            client_socket.close()
+            return
+
     except Exception as e:
         print(f"Erro ao identificar cliente {address}: {e}")
         client_socket.close()
@@ -136,21 +177,21 @@ def handle_client(client_socket, address):
             print(f"Conexão: ventilador registrado {address}")
             client_socket.sendall(montar_mensagem(
                 tipo="confirmacao", mensagem="Registrado como VENTILADOR"
-            ).encode("utf-8"))
+            ))
 
         elif dispositivo == "umidificador":
             umidificadores.append(client_socket)
             print(f"Conexão: umidificador registrado {address}")
             client_socket.sendall(montar_mensagem(
                 tipo="confirmacao", mensagem="Registrado como UMIDIFICADOR"
-            ).encode("utf-8"))
+            ))
 
         else:
             operadores.append(client_socket)
             print(f"Conexão: operador registrado {address}")
             client_socket.sendall(montar_mensagem(
                 tipo="confirmacao", mensagem="Conectado como OPERADOR. Aguardando dados..."
-            ).encode("utf-8"))
+            ))
 
     if dispositivo not in ("ventilador", "umidificador"):
         loop_operador(client_socket, address)
@@ -177,32 +218,65 @@ def loop_operador(client_socket, address):
                     continue
 
                 dados = json.loads(linha)
-                acao = dados.get("acao", "")
-                print(f"Override {address}: {acao}")
+
+                if dados.get("tipo") != "override":
+                    print(f"Mensagem ignorada de {address}: tipo={dados.get('tipo')}")
+                    continue
+
+                acao     = dados.get("acao", "")
+                operador = dados.get("operador", "desconhecido")
+                print(f"Override de '{operador}' em {address}: {acao}")
 
                 if acao == "LIGAR_VENTILADOR":
                     override_ventilador = False
                     with lock:
                         enviar_para_lista(ventiladores, tipo="comando", acao=acao)
-                    notificar_operadores(f"Override: {acao} — automação retomada")
+                    notificar_operadores(
+                        tipo="atuador_update",
+                        dispositivo="ventilador",
+                        estado="LIGADO",
+                        override=False,
+                        motivo=f"Override manual por '{operador}' — automação retomada"
+                    )
 
                 elif acao == "DESLIGAR_VENTILADOR":
                     override_ventilador = True
                     with lock:
                         enviar_para_lista(ventiladores, tipo="comando", acao=acao)
-                    notificar_operadores(f"Override: {acao} — automação suspensa")
+                    notificar_operadores(
+                        tipo="atuador_update",
+                        dispositivo="ventilador",
+                        estado="DESLIGADO",
+                        override=True,
+                        motivo=f"Override manual por '{operador}' — automação suspensa"
+                    )
 
                 elif acao == "LIGAR_UMIDIFICADOR":
                     override_umidificador = False
                     with lock:
                         enviar_para_lista(umidificadores, tipo="comando", acao=acao)
-                    notificar_operadores(f"Override: {acao} — automação retomada")
+                    notificar_operadores(
+                        tipo="atuador_update",
+                        dispositivo="umidificador",
+                        estado="LIGADO",
+                        override=False,
+                        motivo=f"Override manual por '{operador}' — automação retomada"
+                    )
 
                 elif acao == "DESLIGAR_UMIDIFICADOR":
                     override_umidificador = True
                     with lock:
                         enviar_para_lista(umidificadores, tipo="comando", acao=acao)
-                    notificar_operadores(f"Override: {acao} — automação suspensa")
+                    notificar_operadores(
+                        tipo="atuador_update",
+                        dispositivo="umidificador",
+                        estado="DESLIGADO",
+                        override=True,
+                        motivo=f"Override manual por '{operador}' — automação suspensa"
+                    )
+
+                else:
+                    print(f"Ação desconhecida de {address}: {acao}")
 
         except Exception:
             break
@@ -231,10 +305,25 @@ def loop_atuador(client_socket, address, dispositivo):
                     continue
 
                 dados = json.loads(linha)
-                if dados.get("tipo") == "status":
-                    log = f"Atuador {dispositivo.upper()} {address}: {dados.get('dispositivo')}:{dados.get('estado')}"
-                    print(log)
-                    notificar_operadores(log)
+
+                if dados.get("tipo") != "status":
+                    print(f"Mensagem ignorada de {address}: tipo={dados.get('tipo')}")
+                    continue
+
+                estado = dados.get("estado", "?")
+                print(f"Status {dispositivo.upper()} {address}: {estado}")
+
+                # Repassa o status ao operador de forma estruturada
+                notificar_operadores(
+                    tipo="atuador_update",
+                    dispositivo=dispositivo,
+                    estado=estado,
+                    override=(
+                        override_ventilador   if dispositivo == "ventilador"
+                        else override_umidificador
+                    ),
+                    motivo=f"Confirmação do dispositivo"
+                )
 
         except Exception:
             break
@@ -247,7 +336,7 @@ def loop_atuador(client_socket, address, dispositivo):
     print(f"Desconexão: atuador {dispositivo} {address}")
 
 
-# Servidores de rede
+# ── Servidores de rede ────────────────────────────────────────────────────────
 
 def tcp_server():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
@@ -271,6 +360,9 @@ def udp_temp_server():
             data, address = udp.recvfrom(2048)
             try:
                 dados = json.loads(data.decode("utf-8"))
+                if dados.get("tipo") != "sensor" or dados.get("dispositivo") != "temperatura":
+                    print(f"Mensagem inválida do sensor de temperatura: {dados}")
+                    continue
                 valor = int(dados["valor"])
                 processar_temperatura(valor, address)
             except Exception as e:
@@ -286,6 +378,9 @@ def udp_umid_server():
             data, address = udp.recvfrom(2048)
             try:
                 dados = json.loads(data.decode("utf-8"))
+                if dados.get("tipo") != "sensor" or dados.get("dispositivo") != "umidade":
+                    print(f"Mensagem inválida do sensor de umidade: {dados}")
+                    continue
                 valor = int(dados["valor"])
                 processar_umidade(valor, address)
             except Exception as e:
