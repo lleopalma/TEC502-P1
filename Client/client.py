@@ -6,6 +6,7 @@ import time
 
 HOST = os.environ.get("SERVER_HOST", "servidor")
 PORT = 12345
+RETRY_INTERVAL = 5  # segundos entre tentativas de reconexão
 
 running  = True
 exibindo = False
@@ -33,7 +34,6 @@ def receber_mensagens_background(sock):
                         continue
                     try:
                         msg = json.loads(linha)
-                        # Exibe de forma legível
                         tipo = msg.get("tipo", "")
                         if tipo == "log":
                             print(f"[{msg.get('origem','?')}] {msg.get('mensagem','')}")
@@ -116,51 +116,66 @@ def apagar_tela():
     os.system("cls" if os.name == "nt" else "clear")
 
 
+def conectar():
+    while True:
+        try:
+            print(f"Tentando conectar ao servidor {HOST}:{PORT}...")
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((HOST, PORT))
+            print("Conectado ao servidor.\n")
+            return sock
+        except Exception as e:
+            print(f"Falha na conexão: {e}. Tentando novamente em {RETRY_INTERVAL}s...")
+            time.sleep(RETRY_INTERVAL)
+
+
 def main():
     global running
 
     print("=== Painel do Operador ===")
     username = input("Digite seu nome: ").strip() or "Operador"
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    while True:
+        running = True
+        sock = conectar()
 
-    try:
-        sock.connect((HOST, PORT))
-        enviar(sock, tipo="identificacao", dispositivo="operador")
+        try:
+            enviar(sock, tipo="identificacao", dispositivo="operador")
 
-        confirmacao = json.loads(sock.recv(1024).decode("utf-8"))
-        print(f"\nServidor: {confirmacao.get('mensagem')}")
+            confirmacao = json.loads(sock.recv(1024).decode("utf-8"))
+            print(f"\nServidor: {confirmacao.get('mensagem')}")
 
-        t_recv = threading.Thread(
-            target=receber_mensagens_background,
-            args=(sock,),
-            daemon=True
-        )
-        t_recv.start()
+            t_recv = threading.Thread(
+                target=receber_mensagens_background,
+                args=(sock,),
+                daemon=True
+            )
+            t_recv.start()
 
-        while running:
-            escolha = menu()
-            if escolha == "1":
-                enviar_override(sock, username)
-                apagar_tela()
-            elif escolha == "2":
-                exibir_status()
-            elif escolha == "3":
-                print("\nSaindo...")
-                running = False
-            else:
-                print("Opção inválida.")
-                apagar_tela()
+            while running:
+                escolha = menu()
+                if escolha == "1":
+                    enviar_override(sock, username)
+                    apagar_tela()
+                elif escolha == "2":
+                    exibir_status()
+                elif escolha == "3":
+                    print("\nSaindo...")
+                    running = False
+                    sock.close()
+                    return  # sai definitivamente
+                else:
+                    print("Opção inválida.")
+                    apagar_tela()
 
-    except ConnectionRefusedError:
-        print(f"Erro: servidor não encontrado em {HOST}:{PORT}.")
-        print("Verifique se o servidor está rodando e se SERVER_HOST está correto.")
-    except Exception as e:
-        print(f"Erro: {e}")
-    finally:
-        running = False
-        sock.close()
-        print("Desconectado.")
+        except Exception as e:
+            print(f"Erro: {e}")
+        finally:
+            running = False
+            sock.close()
+
+        print(f"Servidor indisponível. Reconectando em {RETRY_INTERVAL}s...\n")
+        time.sleep(RETRY_INTERVAL)
 
 
 if __name__ == "__main__":
