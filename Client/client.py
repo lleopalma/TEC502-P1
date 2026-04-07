@@ -1,17 +1,20 @@
 import socket
 import threading
+import json
 import os
 import time
-
-# SERVER_HOST pode ser definido via variável de ambiente:
-#   - mesmo computador / mesmo compose: deixa vazio (usa "servidor" pelo DNS Docker)
-#   - computador diferente: SERVER_HOST=<IP do servidor>
 
 HOST = os.environ.get("SERVER_HOST", "servidor")
 PORT = 12345
 
-running = True
+running  = True
 exibindo = False
+
+
+def enviar(sock, **campos):
+    mensagem = json.dumps(campos, ensure_ascii=False) + "\n"
+    sock.sendall(mensagem.encode("utf-8"))
+
 
 def receber_mensagens_background(sock):
     global running, exibindo
@@ -22,16 +25,32 @@ def receber_mensagens_background(sock):
                 print("\nConexão encerrada pelo servidor.")
                 running = False
                 break
+
             if exibindo:
-                print(dados.decode("utf-8").strip())
+                for linha in dados.decode("utf-8").splitlines():
+                    linha = linha.strip()
+                    if not linha:
+                        continue
+                    try:
+                        msg = json.loads(linha)
+                        # Exibe de forma legível
+                        tipo = msg.get("tipo", "")
+                        if tipo == "log":
+                            print(f"[{msg.get('origem','?')}] {msg.get('mensagem','')}")
+                        else:
+                            print(linha)
+                    except Exception:
+                        print(linha)
                 time.sleep(1)
                 if exibindo:
                     apagar_tela()
+
         except Exception:
             if running:
                 print("\nErro ao receber dados do servidor.")
             running = False
             break
+
 
 def exibir_status():
     global exibindo
@@ -45,7 +64,8 @@ def exibir_status():
 
     apagar_tela()
 
-def enviar_mensagens(sock, username):
+
+def enviar_override(sock, username):
     global running
     print("\nModo Override ativado. Digite 'voltar' para retornar ao menu.\n")
 
@@ -57,23 +77,24 @@ def enviar_mensagens(sock, username):
             print("4. DESLIGAR_UMIDIFICADOR")
             print("5. Voltar ao menu")
             escolha = input("Escolha um comando: ").strip()
-            if escolha == "1":
-                comando = "LIGAR_VENTILADOR"
-            elif escolha == "2":
-                comando = "DESLIGAR_VENTILADOR"
-            elif escolha == "3":
-                comando = "LIGAR_UMIDIFICADOR"
-            elif escolha == "4":
-                comando = "DESLIGAR_UMIDIFICADOR"
+
+            acoes = {
+                "1": "LIGAR_VENTILADOR",
+                "2": "DESLIGAR_VENTILADOR",
+                "3": "LIGAR_UMIDIFICADOR",
+                "4": "DESLIGAR_UMIDIFICADOR",
+            }
+
+            if escolha in acoes:
+                acao = acoes[escolha]
+                enviar(sock, tipo="override", acao=acao, operador=username)
+                print(f"Override enviado: {acao}")
             elif escolha == "5" or escolha.lower() == "voltar":
                 print("\nVoltando ao menu...")
                 break
             else:
-                print("Comando inválido. Tente novamente.")
-                continue
+                print("Opção inválida.")
 
-            print(f"OVERRIDE: {comando} (enviado por {username})")
-            sock.sendall(comando.encode("utf-8"))
         except (EOFError, KeyboardInterrupt):
             running = False
             break
@@ -82,15 +103,18 @@ def enviar_mensagens(sock, username):
             running = False
             break
 
+
 def menu():
     print("\n=== Menu do Operador ===")
-    print("1. Enviar mensagem de override")
+    print("1. Enviar override")
     print("2. Visualizar status do sistema")
     print("3. Sair")
     return input("Escolha uma opção: ").strip()
 
+
 def apagar_tela():
     os.system("cls" if os.name == "nt" else "clear")
+
 
 def main():
     global running
@@ -102,10 +126,10 @@ def main():
 
     try:
         sock.connect((HOST, PORT))
-        sock.sendall("operador".encode("utf-8"))
+        enviar(sock, tipo="identificacao", dispositivo="operador")
 
-        confirmacao = sock.recv(1024).decode("utf-8").strip()
-        print(f"\nServidor: {confirmacao}")
+        confirmacao = json.loads(sock.recv(1024).decode("utf-8"))
+        print(f"\nServidor: {confirmacao.get('mensagem')}")
 
         t_recv = threading.Thread(
             target=receber_mensagens_background,
@@ -117,7 +141,7 @@ def main():
         while running:
             escolha = menu()
             if escolha == "1":
-                enviar_mensagens(sock, username)
+                enviar_override(sock, username)
                 apagar_tela()
             elif escolha == "2":
                 exibir_status()

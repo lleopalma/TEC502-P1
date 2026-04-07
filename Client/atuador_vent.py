@@ -1,51 +1,58 @@
 import socket
+import json
 import os
 
 # Atuador: Ventilador
-# Conecta via TCP e aguarda comandos do servidor
-# SERVER_HOST pode ser definido via variável de ambiente:
-#   - mesmo computador / mesmo compose: deixa vazio (usa "servidor" pelo DNS Docker)
-#   - computador diferente: SERVER_HOST=<IP do servidor>
+# Conecta via TCP, recebe comandos e envia status no formato JSON
 
 HOST = os.environ.get("SERVER_HOST", "servidor")
 PORT = 12345
 
+def enviar(s, **campos):
+    mensagem = json.dumps(campos, ensure_ascii=False) + "\n"
+    s.sendall(mensagem.encode("utf-8"))
+
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
 
-    s.sendall("ventilador".encode("utf-8"))
+    # Identificação
+    enviar(s, tipo="identificacao", dispositivo="ventilador")
 
-    confirmacao = s.recv(1024).decode("utf-8").strip()
-    print(f"Servidor: {confirmacao}")
+    # Confirmação do servidor
+    confirmacao = json.loads(s.recv(1024).decode("utf-8"))
+    print(f"Servidor: {confirmacao.get('mensagem')}")
     print("Aguardando comandos...\n")
 
     buffer = ""
     while True:
         try:
-            dados = s.recv(1024).decode("utf-8")
-            if not dados:
+            chunk = s.recv(1024).decode("utf-8")
+            if not chunk:
                 print("Conexão encerrada pelo servidor.")
                 break
 
-            buffer += dados
+            buffer += chunk
             while "\n" in buffer:
                 linha, buffer = buffer.split("\n", 1)
-                comando = linha.strip()
-                if not comando:
+                linha = linha.strip()
+                if not linha:
                     continue
 
-                if comando == "LIGAR_VENTILADOR":
-                    print("COMANDO RECEBIDO: LIGAR_VENTILADOR")
-                    print("Ventilador LIGADO (temperatura alta detectada)\n")
-                    s.sendall("STATUS_VENTILADOR:LIGADO\n".encode("utf-8"))
+                dados = json.loads(linha)
+                acao = dados.get("acao", "")
 
-                elif comando == "DESLIGAR_VENTILADOR":
-                    print("COMANDO RECEBIDO: DESLIGAR_VENTILADOR")
+                if acao == "LIGAR_VENTILADOR":
+                    print(f"Comando recebido: {acao}")
+                    print("Ventilador LIGADO (temperatura alta detectada)\n")
+                    enviar(s, tipo="status", dispositivo="ventilador", estado="LIGADO")
+
+                elif acao == "DESLIGAR_VENTILADOR":
+                    print(f"Comando recebido: {acao}")
                     print("Ventilador DESLIGADO (temperatura normalizada)\n")
-                    s.sendall("STATUS_VENTILADOR:DESLIGADO\n".encode("utf-8"))
+                    enviar(s, tipo="status", dispositivo="ventilador", estado="DESLIGADO")
 
                 else:
-                    print(f"Comando desconhecido: {comando}")
+                    print(f"Comando desconhecido: {acao}")
 
         except Exception as e:
             print(f"Erro na conexão: {e}")

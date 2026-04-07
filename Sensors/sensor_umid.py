@@ -1,13 +1,11 @@
 import socket
 import time
 import random
+import json
 import os
 
 # Sensor de Umidade
-# Envia leituras de umidade relativa via UDP ao servidor
-# SERVER_HOST pode ser definido via variável de ambiente:
-#   - mesmo computador / mesmo compose: deixa vazio (usa "servidor" pelo DNS Docker)
-#   - computador diferente: SERVER_HOST=<IP do servidor>
+# Envia leituras via UDP ao servidor no formato JSON
 
 HOST = os.environ.get("SERVER_HOST", "servidor")
 PORT = 12347
@@ -18,11 +16,16 @@ print(f"Sensor de umidade iniciado. Enviando para {HOST}:{PORT} a cada 1s\n")
 
 while True:
     try:
-        umidade = random.randint(40, 80)
-        mensagem = f"umidade:{umidade}"
+        valor = random.randint(40, 80)
+        mensagem = json.dumps({
+            "tipo":        "sensor",
+            "dispositivo": "umidade",
+            "valor":       valor,
+            "unidade":     "%"
+        })
 
         sensor_socket.sendto(mensagem.encode("utf-8"), (HOST, PORT))
-        print(f"Enviado: {mensagem}%")
+        print(f"Enviado: umidade:{valor}%")
 
         time.sleep(1)
     except KeyboardInterrupt:

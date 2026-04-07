@@ -1,34 +1,41 @@
 import socket
 import threading
+import json
 
 # Listas separadas por tipo de cliente TCP
-operadores    = []  # clientes humanos (client.py)
-ventiladores  = []  # atuadores de temperatura
-umidificadores = [] # atuadores de umidade
+operadores     = []
+ventiladores   = []
+umidificadores = []
 
 # Portas
 TCP_PORT      = 12345
-UDP_TEMP_PORT = 12346  # sensor de temperatura
-UDP_UMID_PORT = 12347  # sensor de umidade
+UDP_TEMP_PORT = 12346
+UDP_UMID_PORT = 12347
 HOST          = "0.0.0.0"
 
 # Limiares
-TEMP_LIGAR    = 30  # °C → liga ventilador
+TEMP_LIGAR    = 30
 TEMP_DESLIGAR = 25
-UMID_LIGAR    = 70  # %  → liga umidificador
+UMID_LIGAR    = 70
 UMID_DESLIGAR = 50
 
-# Flags de override — True = operador assumiu o controle, automação suspensa
+# Flags de override
 override_ventilador   = False
 override_umidificador = False
 
 lock = threading.Lock()
 
 
-# Utilitários de envio
+# Utilitários
 
-def enviar_para_lista(lista, mensagem):
-    """Envia uma mensagem para todos os sockets de uma lista."""
+def montar_mensagem(**campos):
+    """Serializa um dicionário para JSON + newline."""
+    return json.dumps(campos, ensure_ascii=False) + "\n"
+
+
+def enviar_para_lista(lista, **campos):
+    """Envia uma mensagem JSON para todos os sockets de uma lista."""
+    mensagem = montar_mensagem(**campos)
     falhos = []
     for s in lista:
         try:
@@ -41,7 +48,7 @@ def enviar_para_lista(lista, mensagem):
 
 def notificar_operadores(mensagem):
     with lock:
-        enviar_para_lista(operadores, f"[SERVIDOR] {mensagem}\n")
+        enviar_para_lista(operadores, tipo="log", origem="servidor", mensagem=mensagem)
 
 
 # Lógica da temperatura
@@ -51,7 +58,7 @@ ultimo_cmd_temp = None
 def processar_temperatura(valor, endereco):
     global ultimo_cmd_temp
 
-    log = f"Sensor de temperatura {endereco}: {valor}°C"
+    log = f"Sensor temperatura {endereco}: {valor}°C"
     print(log)
     notificar_operadores(log)
 
@@ -60,17 +67,17 @@ def processar_temperatura(valor, endereco):
 
     if valor >= TEMP_LIGAR and ultimo_cmd_temp != "LIGAR":
         ultimo_cmd_temp = "LIGAR"
-        cmd = "LIGAR_VENTILADOR"
-        print(cmd)
+        print(f"Comando: LIGAR_VENTILADOR")
+        notificar_operadores(f"Temperatura alta ({valor}°C) → LIGAR_VENTILADOR")
         with lock:
-            enviar_para_lista(ventiladores, cmd + "\n")
+            enviar_para_lista(ventiladores, tipo="comando", acao="LIGAR_VENTILADOR")
 
     elif valor <= TEMP_DESLIGAR and ultimo_cmd_temp != "DESLIGAR":
         ultimo_cmd_temp = "DESLIGAR"
-        cmd = "DESLIGAR_VENTILADOR"
-        print(cmd)
+        print(f"Comando: DESLIGAR_VENTILADOR")
+        notificar_operadores(f"Temperatura normalizada ({valor}°C) → DESLIGAR_VENTILADOR")
         with lock:
-            enviar_para_lista(ventiladores, cmd + "\n")
+            enviar_para_lista(ventiladores, tipo="comando", acao="DESLIGAR_VENTILADOR")
 
 
 # Lógica da umidade
@@ -80,7 +87,7 @@ ultimo_cmd_umid = None
 def processar_umidade(valor, endereco):
     global ultimo_cmd_umid
 
-    log = f"Sensor de umidade {endereco}: {valor}%"
+    log = f"Sensor umidade {endereco}: {valor}%"
     print(log)
     notificar_operadores(log)
 
@@ -89,100 +96,113 @@ def processar_umidade(valor, endereco):
 
     if valor >= UMID_LIGAR and ultimo_cmd_umid != "LIGAR":
         ultimo_cmd_umid = "LIGAR"
-        cmd = "LIGAR_UMIDIFICADOR"
-        print(cmd)
+        print(f"Comando: LIGAR_UMIDIFICADOR")
+        notificar_operadores(f"Umidade alta ({valor}%) → LIGAR_UMIDIFICADOR")
         with lock:
-            enviar_para_lista(umidificadores, cmd + "\n")
+            enviar_para_lista(umidificadores, tipo="comando", acao="LIGAR_UMIDIFICADOR")
 
     elif valor <= UMID_DESLIGAR and ultimo_cmd_umid != "DESLIGAR":
         ultimo_cmd_umid = "DESLIGAR"
-        cmd = "DESLIGAR_UMIDIFICADOR"
-        print(cmd)
+        print(f"Comando: DESLIGAR_UMIDIFICADOR")
+        notificar_operadores(f"Umidade normalizada ({valor}%) → DESLIGAR_UMIDIFICADOR")
         with lock:
-            enviar_para_lista(umidificadores, cmd + "\n")
+            enviar_para_lista(umidificadores, tipo="comando", acao="DESLIGAR_UMIDIFICADOR")
 
 
 # Tratamento de clientes TCP
 
 def handle_client(client_socket, address):
-    """
-    Todo cliente TCP envia uma linha de identificação ao conectar:
-      "operador"      → painel humano
-      "ventilador"    → atuador de temperatura
-      "umidificador"  → atuador de umidade
-    """
+    buffer = ""
     try:
-        dados = client_socket.recv(1024).decode("utf-8").strip()
-    except Exception:
+        while "\n" not in buffer:
+            chunk = client_socket.recv(1024).decode("utf-8")
+            if not chunk:
+                client_socket.close()
+                return
+            buffer += chunk
+
+        linha, _ = buffer.split("\n", 1)
+        dados = json.loads(linha.strip())
+    except Exception as e:
+        print(f"Erro ao identificar cliente {address}: {e}")
         client_socket.close()
         return
 
-    tipo = dados.lower()
+    dispositivo = dados.get("dispositivo", "").lower()
 
     with lock:
-        if tipo == "ventilador":
+        if dispositivo == "ventilador":
             ventiladores.append(client_socket)
-            print(f"Ventilador registrado: {address}")
-            client_socket.sendall("Registrado como VENTILADOR\n".encode())
-        elif tipo == "umidificador":
+            print(f"Conexão: ventilador registrado {address}")
+            client_socket.sendall(montar_mensagem(
+                tipo="confirmacao", mensagem="Registrado como VENTILADOR"
+            ).encode("utf-8"))
+
+        elif dispositivo == "umidificador":
             umidificadores.append(client_socket)
-            print(f"Umidificador registrado: {address}")
-            client_socket.sendall("Registrado como UMIDIFICADOR\n".encode())
+            print(f"Conexão: umidificador registrado {address}")
+            client_socket.sendall(montar_mensagem(
+                tipo="confirmacao", mensagem="Registrado como UMIDIFICADOR"
+            ).encode("utf-8"))
+
         else:
             operadores.append(client_socket)
-            print(f"Operador conectado: {address}")
-            client_socket.sendall("Conectado como OPERADOR. Aguardando dados...\n".encode())
+            print(f"Conexão: operador registrado {address}")
+            client_socket.sendall(montar_mensagem(
+                tipo="confirmacao", mensagem="Conectado como OPERADOR. Aguardando dados..."
+            ).encode("utf-8"))
 
-    if tipo not in ("ventilador", "umidificador"):
+    if dispositivo not in ("ventilador", "umidificador"):
         loop_operador(client_socket, address)
     else:
-        loop_atuador(client_socket, address, tipo)
+        loop_atuador(client_socket, address, dispositivo)
 
 
 def loop_operador(client_socket, address):
-    """Recebe mensagens do operador, interpreta comandos de override."""
     global override_ventilador, override_umidificador
 
+    buffer = ""
     while True:
         try:
-            dados = client_socket.recv(2048)
-            if not dados:
+            chunk = client_socket.recv(2048)
+            if not chunk:
                 break
-            mensagem = dados.decode("utf-8").strip()
-            print(f"[OPERADOR {address}] {mensagem}")
 
-            if mensagem == "LIGAR_VENTILADOR":
-                override_ventilador = False
-                with lock:
-                    enviar_para_lista(ventiladores, mensagem + "\n")
-                notificar_operadores(f"Override: {mensagem} — automação retomada")
+            buffer += chunk.decode("utf-8")
 
-            elif mensagem == "DESLIGAR_VENTILADOR":
-                override_ventilador = True
-                with lock:
-                    enviar_para_lista(ventiladores, mensagem + "\n")
-                notificar_operadores(f"Override: {mensagem} — automação suspensa")
+            while "\n" in buffer:
+                linha, buffer = buffer.split("\n", 1)
+                linha = linha.strip()
+                if not linha:
+                    continue
 
-            elif mensagem == "LIGAR_UMIDIFICADOR":
-                override_umidificador = False
-                with lock:
-                    enviar_para_lista(umidificadores, mensagem + "\n")
-                notificar_operadores(f"Override: {mensagem} — automação retomada")
+                dados = json.loads(linha)
+                acao = dados.get("acao", "")
+                print(f"Override {address}: {acao}")
 
-            elif mensagem == "DESLIGAR_UMIDIFICADOR":
-                override_umidificador = True
-                with lock:
-                    enviar_para_lista(umidificadores, mensagem + "\n")
-                notificar_operadores(f"Override: {mensagem} — automação suspensa")
+                if acao == "LIGAR_VENTILADOR":
+                    override_ventilador = False
+                    with lock:
+                        enviar_para_lista(ventiladores, tipo="comando", acao=acao)
+                    notificar_operadores(f"Override: {acao} — automação retomada")
 
-            else:
-                with lock:
-                    for s in operadores:
-                        if s is not client_socket:
-                            try:
-                                s.sendall(f"[OPERADOR] {mensagem}\n".encode())
-                            except Exception:
-                                pass
+                elif acao == "DESLIGAR_VENTILADOR":
+                    override_ventilador = True
+                    with lock:
+                        enviar_para_lista(ventiladores, tipo="comando", acao=acao)
+                    notificar_operadores(f"Override: {acao} — automação suspensa")
+
+                elif acao == "LIGAR_UMIDIFICADOR":
+                    override_umidificador = False
+                    with lock:
+                        enviar_para_lista(umidificadores, tipo="comando", acao=acao)
+                    notificar_operadores(f"Override: {acao} — automação retomada")
+
+                elif acao == "DESLIGAR_UMIDIFICADOR":
+                    override_umidificador = True
+                    with lock:
+                        enviar_para_lista(umidificadores, tipo="comando", acao=acao)
+                    notificar_operadores(f"Override: {acao} — automação suspensa")
 
         except Exception:
             break
@@ -191,50 +211,40 @@ def loop_operador(client_socket, address):
         if client_socket in operadores:
             operadores.remove(client_socket)
     client_socket.close()
-    print(f"Operador desconectado: {address}")
+    print(f"Desconexão: operador {address}")
 
 
-def loop_atuador(client_socket, address, tipo):
-    """
-    Mantém a conexão do atuador aberta.
-    Lê confirmações de status enviadas pelo atuador e repassa aos operadores.
-
-    Protocolo esperado do atuador:
-      STATUS_VENTILADOR:LIGADO
-      STATUS_VENTILADOR:DESLIGADO
-      STATUS_UMIDIFICADOR:LIGADO
-      STATUS_UMIDIFICADOR:DESLIGADO
-    """
+def loop_atuador(client_socket, address, dispositivo):
     buffer = ""
     while True:
         try:
-            dados = client_socket.recv(1024)
-            if not dados:
+            chunk = client_socket.recv(1024)
+            if not chunk:
                 break
 
-            buffer += dados.decode("utf-8")
+            buffer += chunk.decode("utf-8")
 
-            # Processa linha por linha
             while "\n" in buffer:
                 linha, buffer = buffer.split("\n", 1)
-                status = linha.strip()
-                if not status:
+                linha = linha.strip()
+                if not linha:
                     continue
 
-                # Repassa o status como notificação aos operadores
-                if status.startswith("STATUS_"):
-                    print(f"[ATUADOR {tipo.upper()} {address}] {status}")
-                    notificar_operadores(f"Atuador {tipo.upper()}: {status}")
+                dados = json.loads(linha)
+                if dados.get("tipo") == "status":
+                    log = f"Atuador {dispositivo.upper()} {address}: {dados.get('dispositivo')}:{dados.get('estado')}"
+                    print(log)
+                    notificar_operadores(log)
 
         except Exception:
             break
 
     with lock:
-        lista = ventiladores if tipo == "ventilador" else umidificadores
+        lista = ventiladores if dispositivo == "ventilador" else umidificadores
         if client_socket in lista:
             lista.remove(client_socket)
     client_socket.close()
-    print(f"Atuador ({tipo}) desconectado: {address}")
+    print(f"Desconexão: atuador {dispositivo} {address}")
 
 
 # Servidores de rede
@@ -259,14 +269,12 @@ def udp_temp_server():
 
         while True:
             data, address = udp.recvfrom(2048)
-            mensagem = data.decode("utf-8").strip()
-
-            if mensagem.startswith("temperatura:"):
-                try:
-                    valor = int(mensagem.split(":")[1])
-                    processar_temperatura(valor, address)
-                except ValueError:
-                    print(f"Valor inválido recebido do sensor de temperatura: {mensagem}")
+            try:
+                dados = json.loads(data.decode("utf-8"))
+                valor = int(dados["valor"])
+                processar_temperatura(valor, address)
+            except Exception as e:
+                print(f"Mensagem inválida do sensor de temperatura: {e}")
 
 
 def udp_umid_server():
@@ -276,14 +284,12 @@ def udp_umid_server():
 
         while True:
             data, address = udp.recvfrom(2048)
-            mensagem = data.decode("utf-8").strip()
-
-            if mensagem.startswith("umidade:"):
-                try:
-                    valor = int(mensagem.split(":")[1])
-                    processar_umidade(valor, address)
-                except ValueError:
-                    print(f"Valor inválido recebido do sensor de umidade: {mensagem}")
+            try:
+                dados = json.loads(data.decode("utf-8"))
+                valor = int(dados["valor"])
+                processar_umidade(valor, address)
+            except Exception as e:
+                print(f"Mensagem inválida do sensor de umidade: {e}")
 
 
 def main():
