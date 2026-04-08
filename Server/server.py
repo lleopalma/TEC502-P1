@@ -23,10 +23,11 @@ UMID_DESLIGAR = 50
 override_ventilador   = False
 override_umidificador = False
 
-lock = threading.Lock()
+op_lock = threading.Lock()
+vent_lock = threading.Lock()
+umid_lock = threading.Lock()
 
-
-# ── Utilitários ───────────────────────────────────────────────────────────────
+# Utilitários
 
 def montar_mensagem(**campos):
     return (json.dumps(campos, ensure_ascii=False) + "\n").encode("utf-8")
@@ -46,11 +47,11 @@ def enviar_para_lista(lista, **campos):
 
 def notificar_operadores(**campos):
     """Envia uma mensagem estruturada para todos os operadores conectados."""
-    with lock:
+    with op_lock:
         enviar_para_lista(operadores, **campos)
 
 
-# ── Lógica da temperatura ─────────────────────────────────────────────────────
+# Lógica da temperatura
 
 ultimo_cmd_temp = None
 
@@ -73,7 +74,7 @@ def processar_temperatura(valor, endereco):
     if valor >= TEMP_LIGAR and ultimo_cmd_temp != "LIGAR":
         ultimo_cmd_temp = "LIGAR"
         print("Comando: LIGAR_VENTILADOR")
-        with lock:
+        with vent_lock:
             enviar_para_lista(ventiladores, tipo="comando", acao="LIGAR_VENTILADOR")
         notificar_operadores(
             tipo="atuador_update",
@@ -86,7 +87,7 @@ def processar_temperatura(valor, endereco):
     elif valor <= TEMP_DESLIGAR and ultimo_cmd_temp != "DESLIGAR":
         ultimo_cmd_temp = "DESLIGAR"
         print("Comando: DESLIGAR_VENTILADOR")
-        with lock:
+        with vent_lock:
             enviar_para_lista(ventiladores, tipo="comando", acao="DESLIGAR_VENTILADOR")
         notificar_operadores(
             tipo="atuador_update",
@@ -97,7 +98,7 @@ def processar_temperatura(valor, endereco):
         )
 
 
-# ── Lógica da umidade ─────────────────────────────────────────────────────────
+# Lógica da umidade
 
 ultimo_cmd_umid = None
 
@@ -120,7 +121,7 @@ def processar_umidade(valor, endereco):
     if valor >= UMID_LIGAR and ultimo_cmd_umid != "LIGAR":
         ultimo_cmd_umid = "LIGAR"
         print("Comando: LIGAR_UMIDIFICADOR")
-        with lock:
+        with umid_lock:
             enviar_para_lista(umidificadores, tipo="comando", acao="LIGAR_UMIDIFICADOR")
         notificar_operadores(
             tipo="atuador_update",
@@ -133,7 +134,7 @@ def processar_umidade(valor, endereco):
     elif valor <= UMID_DESLIGAR and ultimo_cmd_umid != "DESLIGAR":
         ultimo_cmd_umid = "DESLIGAR"
         print("Comando: DESLIGAR_UMIDIFICADOR")
-        with lock:
+        with umid_lock:
             enviar_para_lista(umidificadores, tipo="comando", acao="DESLIGAR_UMIDIFICADOR")
         notificar_operadores(
             tipo="atuador_update",
@@ -144,7 +145,7 @@ def processar_umidade(valor, endereco):
         )
 
 
-# ── Tratamento de clientes TCP ────────────────────────────────────────────────
+# Tratamento de clientSes TCP
 
 def handle_client(client_socket, address):
     buffer = ""
@@ -171,7 +172,7 @@ def handle_client(client_socket, address):
 
     dispositivo = dados.get("dispositivo", "").lower()
 
-    with lock:
+    with op_lock:
         if dispositivo == "ventilador":
             ventiladores.append(client_socket)
             print(f"Conexão: ventilador registrado {address}")
@@ -229,7 +230,7 @@ def loop_operador(client_socket, address):
 
                 if acao == "LIGAR_VENTILADOR":
                     override_ventilador = False
-                    with lock:
+                    with vent_lock:
                         enviar_para_lista(ventiladores, tipo="comando", acao=acao)
                     notificar_operadores(
                         tipo="atuador_update",
@@ -241,7 +242,7 @@ def loop_operador(client_socket, address):
 
                 elif acao == "DESLIGAR_VENTILADOR":
                     override_ventilador = True
-                    with lock:
+                    with vent_lock:
                         enviar_para_lista(ventiladores, tipo="comando", acao=acao)
                     notificar_operadores(
                         tipo="atuador_update",
@@ -253,7 +254,7 @@ def loop_operador(client_socket, address):
 
                 elif acao == "LIGAR_UMIDIFICADOR":
                     override_umidificador = False
-                    with lock:
+                    with umid_lock:
                         enviar_para_lista(umidificadores, tipo="comando", acao=acao)
                     notificar_operadores(
                         tipo="atuador_update",
@@ -265,7 +266,7 @@ def loop_operador(client_socket, address):
 
                 elif acao == "DESLIGAR_UMIDIFICADOR":
                     override_umidificador = True
-                    with lock:
+                    with umid_lock:
                         enviar_para_lista(umidificadores, tipo="comando", acao=acao)
                     notificar_operadores(
                         tipo="atuador_update",
@@ -281,7 +282,7 @@ def loop_operador(client_socket, address):
         except Exception:
             break
 
-    with lock:
+    with op_lock:
         if client_socket in operadores:
             operadores.remove(client_socket)
     client_socket.close()
@@ -328,7 +329,7 @@ def loop_atuador(client_socket, address, dispositivo):
         except Exception:
             break
 
-    with lock:
+    with op_lock:
         lista = ventiladores if dispositivo == "ventilador" else umidificadores
         if client_socket in lista:
             lista.remove(client_socket)
@@ -336,7 +337,7 @@ def loop_atuador(client_socket, address, dispositivo):
     print(f"Desconexão: atuador {dispositivo} {address}")
 
 
-# ── Servidores de rede ────────────────────────────────────────────────────────
+# Servidores de rede
 
 def tcp_server():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:

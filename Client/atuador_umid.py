@@ -66,7 +66,7 @@ while True:
 
                 if acao == "LIGAR_UMIDIFICADOR":
                     print(f"Comando recebido: {acao}")
-                    print("Umidificador LIGADO (umidade alta detectada)\n")
+                    print("Umidificador LIGADO (umidade baixa detectada)\n")
                     enviar(s, tipo="status", dispositivo="umidificador", estado="LIGADO")
 
                 elif acao == "DESLIGAR_UMIDIFICADOR":

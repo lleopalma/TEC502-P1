@@ -3,6 +3,8 @@ import threading
 import json
 import os
 import time
+from zoneinfo import ZoneInfo
+from datetime import datetime
 
 HOST = os.environ.get("SERVER_HOST", "servidor")
 PORT = 12345
@@ -40,7 +42,9 @@ def enviar(sock, **campos):
 
 
 def adicionar_log(texto: str):
-    ts = time.strftime("%H:%M:%S")
+    fuso = ZoneInfo("America/Bahia")
+    agora = datetime.now(fuso)
+    ts = agora.strftime("%H:%M:%S")
     with estado_lock:
         estado["logs"].append(f"{GRAY}[{ts}]{RESET} {texto}")
         if len(estado["logs"]) > MAX_LOGS:
@@ -128,18 +132,14 @@ def renderizar_dashboard() -> str:
     L = 54
     saida = []
 
-    saida.append("")
-    saida.append(f"  {BOLD}{CYAN}╔{'═'*L}╗{RESET}")
     saida.append(f"  {BOLD}{CYAN}║{WHITE}{'  PAINEL DO OPERADOR — SISTEMA IoT  ':^{L}}{CYAN}║{RESET}")
-    saida.append(f"  {BOLD}{CYAN}╚{'═'*L}╝{RESET}")
-    saida.append("")
 
     # Sensores
-    ct = cor_temperatura(temp_val)
-    cu = cor_umidade(umid_val)
+    cort = cor_temperatura(temp_val)
+    coru = cor_umidade(umid_val)
     saida += ["  " + l for l in bloco("📡  SENSORES", [
-        f"{WHITE}Temperatura : {ct}{BOLD}{temp_val}{temp_uni}{RESET}",
-        f"{WHITE}Umidade     : {cu}{BOLD}{umid_val}{umid_uni}{RESET}",
+        f"{WHITE}Temperatura : {cort}{BOLD}{temp_val}{temp_uni}{RESET}",
+        f"{WHITE}Umidade     : {coru}{BOLD}{umid_val}{umid_uni}{RESET}",
     ])]
     saida.append("")
 
@@ -154,12 +154,12 @@ def renderizar_dashboard() -> str:
         ]
 
     atu_linhas = linha_atuador("Ventilador",   vent) + [""] + linha_atuador("Umidificador", umid_dev)
-    saida += ["  " + l for l in bloco("⚙️   ATUADORES", atu_linhas)]
+    saida += ["  " + l for l in bloco("ATUADORES", atu_linhas)]
     saida.append("")
 
     # Log de eventos 
     log_linhas = logs[-MAX_LOGS:] if logs else [f"{GRAY}(nenhum evento ainda){RESET}"]
-    saida += ["  " + l for l in bloco(f"📋  ÚLTIMOS EVENTOS  (max {MAX_LOGS})", log_linhas)]
+    saida += ["  " + l for l in bloco(f"ÚLTIMOS EVENTOS  (max {MAX_LOGS})", log_linhas)]
     saida.append("")
     saida.append(f"  {GRAY}Pressione Enter para voltar ao menu...{RESET}")
     saida.append("")
@@ -260,7 +260,7 @@ def enviar_override(sock, username):
             break
 
 
-# ── Menu e utilitários ────────────────────────────────────────────────────────
+# Menu e utilitários
 
 def menu():
     print(f"\n  {BOLD}{CYAN}╔{'═'*36}╗{RESET}")
@@ -289,7 +289,7 @@ def conectar():
             time.sleep(RETRY_INTERVAL)
 
 
-# ── Ponto de entrada ──────────────────────────────────────────────────────────
+# Ponto de entrada
 
 def main():
     global running
