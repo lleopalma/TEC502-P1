@@ -1,22 +1,4 @@
 services:
-  atuador-vent:
-    build: ./
-    command: python -u atuador_vent.py
-    container_name: "atuador-vent"
-    environment:
-      - SERVER_HOST=${SERVER_HOST:-servidor}
-    networks:
-      - iot_net
-
-  atuador-umid:
-    build: ./
-    command: python -u atuador_umid.py
-    container_name: "atuador-umid"
-    environment:
-      - SERVER_HOST=${SERVER_HOST:-servidor}
-    networks:
-      - iot_net
-
   operador:
     build: ./
     command: python -u client.py
@@ -30,4 +12,5 @@ services:
 
 networks:
   iot_net:
-    driver: bridge
+    external: true
+    name: iot_net

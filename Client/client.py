@@ -17,8 +17,8 @@ exibindo = False
 estado = {
     "temperatura":    {"valor": "--",  "unidade": "°C"},
     "umidade":        {"valor": "--",  "unidade": "%"},
-    "ventilador":     {"estado": "DESCONHECIDO", "override": False, "motivo": ""},
-    "umidificador":   {"estado": "DESCONHECIDO", "override": False, "motivo": ""},
+    "ventilador":     {"estado": "DESCONHECIDO", "override": False, "confirmado": True, "motivo": ""},
+    "umidificador":   {"estado": "DESCONHECIDO", "override": False, "confirmado": True, "motivo": ""},
     "logs":           [],
 }
 MAX_LOGS = 10
@@ -68,13 +68,16 @@ def processar_mensagem(msg: dict):
         dispositivo = msg.get("dispositivo")
         novo_estado = msg.get("estado", "DESCONHECIDO")
         override    = msg.get("override", False)
+        confirmado  = msg.get("confirmado", True)
         motivo      = msg.get("motivo", "")
         if dispositivo in ("ventilador", "umidificador"):
             with estado_lock:
-                estado[dispositivo]["estado"]   = novo_estado
-                estado[dispositivo]["override"] = override
-                estado[dispositivo]["motivo"]   = motivo
-            adicionar_log(f"{motivo} → {dispositivo.upper()} {novo_estado}")
+                estado[dispositivo]["estado"]     = novo_estado
+                estado[dispositivo]["override"]   = override
+                estado[dispositivo]["confirmado"] = confirmado
+                estado[dispositivo]["motivo"]     = motivo
+            adicionar_log(f"{motivo} → {dispositivo.upper()} {novo_estado}"
+                          + ("" if confirmado else " [aguardando]"))
 
     else:
         # Mensagem desconhecida — registra no log como fallback
@@ -97,8 +100,8 @@ def cor_temperatura(val_str: str) -> str:
 def cor_umidade(val_str: str) -> str:
     try:
         v = float(val_str)
-        if v >= 70: return RED
-        if v >= 60: return YELLOW
+        if v <= 50: return RED
+        if v <= 60: return YELLOW
         return GREEN
     except Exception:
         return WHITE
@@ -148,11 +151,12 @@ def renderizar_dashboard() -> str:
 
     # Atuadores
     def linha_atuador(nome, info):
-        cv  = cor_estado(info["estado"])
-        tag = f"  {YELLOW}[OVERRIDE]{RESET}" if info["override"] else ""
-        mot = f"  {GRAY}{info['motivo']}{RESET}" if info["motivo"] else ""
+        cv         = cor_estado(info["estado"])
+        confirmado = info.get("confirmado", True)
+        tag_over   = f"  {YELLOW}[OVERRIDE]{RESET}"   if info["override"] else ""
+        tag_pend   = f"  {YELLOW}[AGUARDANDO]{RESET}" if not confirmado   else ""
         return [
-            f"{WHITE}{nome:<13}: {cv}{BOLD}{info['estado']}{RESET}{tag}",
+            f"{WHITE}{nome:<13}: {cv}{BOLD}{info['estado']}{RESET}{tag_over}{tag_pend}",
             f"  {GRAY}↳ {info['motivo']}{RESET}" if info["motivo"] else f"  {GRAY}↳ sem informação{RESET}",
         ]
 

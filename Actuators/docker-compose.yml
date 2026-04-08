@@ -1,15 +1,17 @@
 services:
-  sensor-temp:
+  atuador-vent:
     build: ./
-    command: python -u sensor_temp.py
+    command: python -u atuador_vent.py
+    container_name: "atuador-vent"
     environment:
       - SERVER_HOST=${SERVER_HOST:-servidor}
     networks:
       - iot_net
 
-  sensor-umid:
+  atuador-umid:
     build: ./
-    command: python -u sensor_umid.py
+    command: python -u atuador_umid.py
+    container_name: "atuador-umid"
     environment:
       - SERVER_HOST=${SERVER_HOST:-servidor}
     networks:

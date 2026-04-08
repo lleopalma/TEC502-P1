@@ -12,3 +12,4 @@ services:
 networks:
   iot_net:
     driver: bridge
+    name: iot_net

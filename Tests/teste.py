@@ -193,10 +193,16 @@ def teste_sensor_update_broadcast(host: str) -> bool:
     """
     Conecta como operador, dispara leitura UDP de temperatura (valor=32°C)
     e verifica se recebe sensor_update com dispositivo=temperatura.
+
+    Aguarda 1.2s antes de enviar para garantir que o rate limiting do servidor
+    (1 repasse/segundo por dispositivo) já expirou, evitando falso negativo
+    quando sensores reais estão rodando em paralelo.
     """
     try:
         op = _operador_conectado(host)
-        time.sleep(0.2)
+
+        # Garante que a janela de rate limiting expirou para temperatura
+        time.sleep(1.2)
 
         udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp.sendto(
