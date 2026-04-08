@@ -148,6 +148,7 @@ def processar_umidade(valor, endereco):
 # Tratamento de clientSes TCP
 
 def handle_client(client_socket, address):
+    client_socket  # evita thread travada por cliente inativo
     buffer = ""
     try:
         while "\n" not in buffer:
@@ -172,27 +173,29 @@ def handle_client(client_socket, address):
 
     dispositivo = dados.get("dispositivo", "").lower()
 
-    with op_lock:
-        if dispositivo == "ventilador":
+    if dispositivo == "ventilador":
+        with vent_lock:
             ventiladores.append(client_socket)
-            print(f"Conexão: ventilador registrado {address}")
-            client_socket.sendall(montar_mensagem(
-                tipo="confirmacao", mensagem="Registrado como VENTILADOR"
-            ))
+        print(f"Conexão: ventilador registrado {address}")
+        client_socket.sendall(montar_mensagem(
+            tipo="confirmacao", mensagem="Registrado como VENTILADOR"
+        ))
 
-        elif dispositivo == "umidificador":
+    elif dispositivo == "umidificador":
+        with umid_lock:
             umidificadores.append(client_socket)
-            print(f"Conexão: umidificador registrado {address}")
-            client_socket.sendall(montar_mensagem(
-                tipo="confirmacao", mensagem="Registrado como UMIDIFICADOR"
-            ))
+        print(f"Conexão: umidificador registrado {address}")
+        client_socket.sendall(montar_mensagem(
+            tipo="confirmacao", mensagem="Registrado como UMIDIFICADOR"
+        ))
 
-        else:
+    else:
+        with op_lock:
             operadores.append(client_socket)
-            print(f"Conexão: operador registrado {address}")
-            client_socket.sendall(montar_mensagem(
-                tipo="confirmacao", mensagem="Conectado como OPERADOR. Aguardando dados..."
-            ))
+        print(f"Conexão: operador registrado {address}")
+        client_socket.sendall(montar_mensagem(
+            tipo="confirmacao", mensagem="Conectado como OPERADOR. Aguardando dados..."
+        ))
 
     if dispositivo not in ("ventilador", "umidificador"):
         loop_operador(client_socket, address)
@@ -329,8 +332,18 @@ def loop_atuador(client_socket, address, dispositivo):
         except Exception:
             break
 
-    with op_lock:
-        lista = ventiladores if dispositivo == "ventilador" else umidificadores
+    # Notifica operadores que o atuador desconectou
+    notificar_operadores(
+        tipo="atuador_update",
+        dispositivo=dispositivo,
+        estado="DESCONECTADO",
+        override=False,
+        motivo=f"Atuador desconectado inesperadamente"
+    )
+
+    lk = vent_lock if dispositivo == "ventilador" else umid_lock
+    lista = ventiladores if dispositivo == "ventilador" else umidificadores
+    with lk:
         if client_socket in lista:
             lista.remove(client_socket)
     client_socket.close()

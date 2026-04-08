@@ -105,7 +105,10 @@ def cor_umidade(val_str: str) -> str:
 
 
 def cor_estado(s: str) -> str:
-    return GREEN if s == "LIGADO" else (RED if s == "DESLIGADO" else GRAY)
+    if s == "LIGADO":     return GREEN
+    if s == "DESLIGADO":  return RED
+    if s == "DESCONECTADO": return YELLOW
+    return GRAY
 
 
 def bloco(titulo: str, linhas: list, L=54) -> list:
@@ -137,7 +140,7 @@ def renderizar_dashboard() -> str:
     # Sensores
     cort = cor_temperatura(temp_val)
     coru = cor_umidade(umid_val)
-    saida += ["  " + l for l in bloco("📡  SENSORES", [
+    saida += ["  " + l for l in bloco("SENSORES", [
         f"{WHITE}Temperatura : {cort}{BOLD}{temp_val}{temp_uni}{RESET}",
         f"{WHITE}Umidade     : {coru}{BOLD}{umid_val}{umid_uni}{RESET}",
     ])]

@@ -2,6 +2,7 @@ services:
   atuador-vent:
     build: ./
     command: python -u atuador_vent.py
+    container_name: "atuador-vent"
     environment:
       - SERVER_HOST=${SERVER_HOST:-servidor}
     networks:
@@ -10,6 +11,7 @@ services:
   atuador-umid:
     build: ./
     command: python -u atuador_umid.py
+    container_name: "atuador-umid"
     environment:
       - SERVER_HOST=${SERVER_HOST:-servidor}
     networks:
