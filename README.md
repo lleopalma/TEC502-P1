@@ -118,3 +118,28 @@ Broadcast (Servidor → Operadores):
 {"tipo": "sensor_update", "dispositivo": "temperatura", "valor": 28, "unidade": "°C"}
 {"tipo": "atuador_update", "dispositivo": "ventilador", "estado": "LIGADO", "override": false, "motivo": "Temperatura alta (28°C)"}
 
+⚙️ Configuração
+Limiares de Automação
+TEMP_LIGAR    = 30    # Liga ventilador acima de 30°C
+TEMP_DESLIGAR = 25    # Desliga ventilador abaixo de 25°C
+UMID_LIGAR    = 70    # Liga umidificador acima de 70%
+UMID_DESLIGAR = 50    # Desliga umidificador abaixo de 50%
+
+📁 Estrutura do Projeto
+TEC502-P1/
+├── README.md
+├── Server/
+│   ├── server.py          # Servidor principal (TCP + UDP)
+│   ├── Dockerfile
+│   └── docker-compose.yml
+├── Client/
+│   ├── client.py          # Painel do operador (interativo)
+│   ├── atuador_vent.py    # Ventilador (simula atuador)
+│   ├── atuador_umid.py    # Umidificador (simula atuador)
+│   ├── Dockerfile
+│   └── docker-compose.yml
+└── Sensors/
+    ├── sensor_temp.py     # Sensor de temperatura (simula leitura)
+    ├── sensor_umid.py     # Sensor de umidade (simula leitura)
+    ├── Dockerfile
+    └── docker-compose.yml
