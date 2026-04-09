@@ -6,4 +6,4 @@ services:
     stdin_open: true
     tty: true
     environment:
-      - SERVER_HOST=${SERVER_HOST:?SERVER_HOST nao definido. Ex: export SERVER_HOST=192.168.1.10}
+      - SERVER_HOST=${SERVER_HOST:-servidor}
