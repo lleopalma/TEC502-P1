@@ -3,7 +3,7 @@ import json
 import os
 import time
 
-# Atuador: Ventilador
+# Atuador: Umidificador
 # Conecta via TCP, recebe comandos e envia status no formato JSON
 
 HOST = os.environ.get("SERVER_HOST", "servidor")
@@ -45,7 +45,7 @@ while True:
 
     try:
         # Identificação
-        enviar(s, tipo="identificacao", dispositivo="ventilador")
+        enviar(s, tipo="identificacao", dispositivo="umidificador")
 
         # Confirmação do servidor — usa buffer para não perder bytes extras
         buffer = ""
@@ -75,15 +75,15 @@ while True:
 
                 acao = dados.get("acao", "")
 
-                if acao == "LIGAR_VENTILADOR":
+                if acao == "LIGAR_UMIDIFICADOR":
                     print(f"Comando recebido: {acao}")
-                    print("Ventilador LIGADO (temperatura alta detectada)\n")
-                    enviar(s, tipo="status", dispositivo="ventilador", estado="LIGADO")
+                    print("Umidificador LIGADO (umidade baixa detectada)\n")
+                    enviar(s, tipo="status", dispositivo="umidificador", estado="LIGADO")
 
-                elif acao == "DESLIGAR_VENTILADOR":
+                elif acao == "DESLIGAR_UMIDIFICADOR":
                     print(f"Comando recebido: {acao}")
-                    print("Ventilador DESLIGADO (temperatura normalizada)\n")
-                    enviar(s, tipo="status", dispositivo="ventilador", estado="DESLIGADO")
+                    print("Umidificador DESLIGADO (umidade normalizada)\n")
+                    enviar(s, tipo="status", dispositivo="umidificador", estado="DESLIGADO")
 
                 else:
                     print(f"Comando desconhecido: {acao}")
