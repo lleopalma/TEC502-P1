@@ -278,7 +278,8 @@ def teste_override_desligar_suspende_automacao(host: str) -> bool:
             op,
             lambda m: (m.get("tipo") == "atuador_update"
                        and m.get("dispositivo") == "ventilador"
-                       and m.get("estado") == "DESLIGADO")
+                       and m.get("estado") == "DESLIGADO"
+                       and m.get("override") is True)
         )
         op.close()
 
