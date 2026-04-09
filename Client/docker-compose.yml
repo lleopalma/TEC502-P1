@@ -6,4 +6,4 @@ services:
     stdin_open: true
     tty: true
     environment:
-      - SERVER_HOST=${SERVER_HOST:-servidor}
+      SERVER_HOST: ${SERVER_HOST}

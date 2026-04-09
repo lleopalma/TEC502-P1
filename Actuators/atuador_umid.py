@@ -3,17 +3,28 @@ import json
 import os
 import time
 
-# Atuador: Umidificador
+# Atuador: Ventilador
 # Conecta via TCP, recebe comandos e envia status no formato JSON
 
 HOST = os.environ.get("SERVER_HOST", "servidor")
 PORT = 12345
-RETRY_INTERVAL = 5  # segundos entre tentativas de reconexão
+RETRY_INTERVAL = 5
 
 
 def enviar(s, **campos):
     mensagem = json.dumps(campos, ensure_ascii=False) + "\n"
     s.sendall(mensagem.encode("utf-8"))
+
+
+def ler_linha(s, buffer):
+    """Lê do socket até ter uma linha completa, retorna (linha, buffer_restante)."""
+    while "\n" not in buffer:
+        chunk = s.recv(1024).decode("utf-8")
+        if not chunk:
+            raise ConnectionError("Conexão encerrada pelo servidor.")
+        buffer += chunk
+    linha, buffer = buffer.split("\n", 1)
+    return linha.strip(), buffer
 
 
 def conectar():
@@ -34,15 +45,16 @@ while True:
 
     try:
         # Identificação
-        enviar(s, tipo="identificacao", dispositivo="umidificador")
+        enviar(s, tipo="identificacao", dispositivo="ventilador")
 
-        # Confirmação do servidor
-        confirmacao = json.loads(s.recv(1024).decode("utf-8"))
+        # Confirmação do servidor — usa buffer para não perder bytes extras
+        buffer = ""
+        linha, buffer = ler_linha(s, buffer)
+        confirmacao = json.loads(linha)
         assert confirmacao.get("tipo") == "confirmacao"
         print(f"Servidor: {confirmacao.get('mensagem')}")
         print("Aguardando comandos...\n")
 
-        buffer = ""
         while True:
             chunk = s.recv(1024).decode("utf-8")
             if not chunk:
@@ -58,21 +70,20 @@ while True:
 
                 dados = json.loads(linha)
 
-                # Ignora mensagens que não sejam comandos
                 if dados.get("tipo") != "comando":
                     continue
 
                 acao = dados.get("acao", "")
 
-                if acao == "LIGAR_UMIDIFICADOR":
+                if acao == "LIGAR_VENTILADOR":
                     print(f"Comando recebido: {acao}")
-                    print("Umidificador LIGADO (umidade baixa detectada)\n")
-                    enviar(s, tipo="status", dispositivo="umidificador", estado="LIGADO")
+                    print("Ventilador LIGADO (temperatura alta detectada)\n")
+                    enviar(s, tipo="status", dispositivo="ventilador", estado="LIGADO")
 
-                elif acao == "DESLIGAR_UMIDIFICADOR":
+                elif acao == "DESLIGAR_VENTILADOR":
                     print(f"Comando recebido: {acao}")
-                    print("Umidificador DESLIGADO (umidade normalizada)\n")
-                    enviar(s, tipo="status", dispositivo="umidificador", estado="DESLIGADO")
+                    print("Ventilador DESLIGADO (temperatura normalizada)\n")
+                    enviar(s, tipo="status", dispositivo="ventilador", estado="DESLIGADO")
 
                 else:
                     print(f"Comando desconhecido: {acao}")

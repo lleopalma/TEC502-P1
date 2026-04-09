@@ -1,12 +1,9 @@
 services:
-  sensor-temp:
+  operador:
     build: ./
-    command: python -u sensor_temp.py
-    environment:
-      SERVER_HOST: ${SERVER_HOST:-servidor}
-
-  sensor-umid:
-    build: ./
-    command: python -u sensor_umid.py
+    command: python -u client.py
+    container_name: "operador"
+    stdin_open: true
+    tty: true
     environment:
       SERVER_HOST: ${SERVER_HOST:-servidor}
