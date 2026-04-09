@@ -4,20 +4,11 @@ services:
     command: python -u atuador_vent.py
     container_name: "atuador-vent"
     environment:
-      - SERVER_HOST=${SERVER_HOST:-servidor}
-    networks:
-      - iot_net
+      - SERVER_HOST=${SERVER_HOST:?SERVER_HOST nao definido. Ex: export SERVER_HOST=192.168.1.10}
 
   atuador-umid:
     build: ./
     command: python -u atuador_umid.py
     container_name: "atuador-umid"
     environment:
-      - SERVER_HOST=${SERVER_HOST:-servidor}
-    networks:
-      - iot_net
-
-networks:
-  iot_net:
-    external: true
-    name: iot_net
+      - SERVER_HOST=${SERVER_HOST:?SERVER_HOST nao definido. Ex: export SERVER_HOST=192.168.1.10}
